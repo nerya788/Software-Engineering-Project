@@ -1,12 +1,15 @@
+// backend/db.js
 require('dotenv').config();
-const { Pool } = require('pg');
+const mongoose = require('mongoose');
 
-const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
+async function connectMongo() {
+  const uri = process.env.MONGO_URI;
+  if (!uri) throw new Error('MONGO_URI missing in .env');
 
-module.exports = pool;
+  await mongoose.connect(uri, {
+    dbName: process.env.DB_NAME || 'wedding_db',
+  });
+  console.log('✅ Mongo connected:', mongoose.connection.host);
+}
+
+module.exports = { connectMongo, mongoose };
