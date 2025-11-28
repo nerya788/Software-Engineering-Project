@@ -1,365 +1,96 @@
 import { useState } from 'react';
 import axios from 'axios';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
+import Dashboard from './components/Dashboard';
+import GuestList from './components/GuestList';
+
 function App() {
-  // מצב התחברות
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
-  const [currentUser, setCurrentUser] = useState(null); // {id, email, full_name}
-
-  // טפסים
-  const [registerForm, setRegisterForm] = useState({
-    email: '',
-    password: '',
-    fullName: '',
-  });
-
-  const [loginForm, setLoginForm] = useState({
-    email: '',
-    password: '',
-  });
-
-  const [eventForm, setEventForm] = useState({
-    title: '',
-    eventDate: '',
-    description: '',
-  });
-
-  const [taskForm, setTaskForm] = useState({
-    title: '',
-    dueDate: '',
-    isDone: false,
-  });
-
+  const [mode, setMode] = useState('login');
+  const [currentUser, setCurrentUser] = useState(null);
+  
+  const [registerForm, setRegisterForm] = useState({ email: '', password: '', fullName: '' });
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [message, setMessage] = useState('');
 
-  // --- handlers לטפסים ---
-  const handleRegisterChange = (e) => {
-    setRegisterForm({ ...registerForm, [e.target.name]: e.target.value });
-  };
+  const handleRegisterChange = (e) => setRegisterForm({ ...registerForm, [e.target.name]: e.target.value });
+  const handleLoginChange = (e) => setLoginForm({ ...loginForm, [e.target.name]: e.target.value });
 
-  const handleLoginChange = (e) => {
-    setLoginForm({ ...loginForm, [e.target.name]: e.target.value });
-  };
-
-  const handleEventChange = (e) => {
-    setEventForm({ ...eventForm, [e.target.name]: e.target.value });
-  };
-
-  const handleTaskChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setTaskForm({
-      ...taskForm,
-      [name]: type === 'checkbox' ? checked : value,
-    });
-  };
-
-  // --- קריאות ל-API ---
   const handleRegister = async (e) => {
     e.preventDefault();
-    setMessage('');
-
     try {
       const res = await axios.post('http://localhost:4000/api/users/register', registerForm);
-      setMessage(`User registered with id ${res.data.id}. You can now login.`);
+      setMessage(`User registered! Please login.`);
       setMode('login');
       setRegisterForm({ email: '', password: '', fullName: '' });
     } catch (err) {
-      console.error(err);
-      const msg = err.response?.data?.message || 'Something went wrong';
-      setMessage('Error (register): ' + msg);
+      setMessage('Error register: ' + (err.response?.data?.message || 'Error'));
     }
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setMessage('');
-
     try {
       const res = await axios.post('http://localhost:4000/api/users/login', loginForm);
-      setCurrentUser(res.data); // {id, email, full_name}
-      setMessage(`Welcome, ${res.data.full_name || res.data.email}!`);
-      setLoginForm({ email: '', password: '' });
+      setCurrentUser(res.data);
+      setMessage('');
     } catch (err) {
-      console.error(err);
-      const msg = err.response?.data?.message || 'Something went wrong';
-      setMessage('Error (login): ' + msg);
-    }
-  };
-
-  const handleCreateEvent = async (e) => {
-    e.preventDefault();
-    setMessage('');
-
-    try {
-      const res = await axios.post('http://localhost:4000/api/events', {
-        userId: currentUser.id,
-        title: eventForm.title,
-        eventDate: eventForm.eventDate,
-        description: eventForm.description,
-      });
-      setMessage(`Event created with id ${res.data.id}`);
-      setEventForm({ title: '', eventDate: '', description: '' });
-    } catch (err) {
-      console.error(err);
-      const msg = err.response?.data?.message || 'Something went wrong';
-      setMessage('Error (event): ' + msg);
-    }
-  };
-
-  const handleCreateTask = async (e) => {
-    e.preventDefault();
-    setMessage('');
-
-    try {
-      const res = await axios.post('http://localhost:4000/api/tasks', {
-        userId: currentUser.id,
-        title: taskForm.title,
-        dueDate: taskForm.dueDate || null,
-        isDone: taskForm.isDone,
-      });
-      setMessage(`Task created with id ${res.data.id}`);
-      setTaskForm({ title: '', dueDate: '', isDone: false });
-    } catch (err) {
-      console.error(err);
-      const msg = err.response?.data?.message || 'Something went wrong';
-      setMessage('Error (task): ' + msg);
+      setMessage('Error login: ' + (err.response?.data?.message || 'Error'));
     }
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    setMessage('Logged out.');
+    setMode('login');
   };
 
-  // --- UI למסך Login/Register ---
+
   if (!currentUser) {
     return (
-      <div className="app">
-        <header className="app-header">
-          <div className="app-header-inner">
-            <h1 className="app-title">Wedding Planner</h1>
-            {/* אין יותר טקסט על ספרינט */}
-            <span className="app-subtitle">Plan & track your wedding easily</span>
+      <div className="app flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="auth-card card w-full max-w-md p-6 bg-white shadow-lg rounded-lg">
+          <h1 className="text-3xl font-bold text-center text-purple-600 mb-2">Wedding Planner</h1>
+          
+          <div className="tabs flex justify-center gap-4 mb-6 border-b pb-2">
+            <button className={`pb-1 ${mode === 'login' ? 'border-b-2 border-purple-600 font-bold' : ''}`} onClick={() => setMode('login')}>Login</button>
+            <button className={`pb-1 ${mode === 'register' ? 'border-b-2 border-purple-600 font-bold' : ''}`} onClick={() => setMode('register')}>Register</button>
           </div>
-        </header>
 
-        <main className="app-main">
-          <div className="auth-card card">
-            <div className="tabs">
-              <button
-                type="button"
-                className={`tab ${mode === 'login' ? 'tab-active' : ''}`}
-                onClick={() => setMode('login')}
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                className={`tab ${mode === 'register' ? 'tab-active' : ''}`}
-                onClick={() => setMode('register')}
-              >
-                Register
-              </button>
-            </div>
-
-            {mode === 'login' && (
-              <div>
-                <h2 className="card-title">Sign in to your account</h2>
-                <form className="form" onSubmit={handleLogin}>
-                  <div className="form-group">
-                    <label>Email</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={loginForm.email}
-                      onChange={handleLoginChange}
-                      placeholder="you@example.com"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Password</label>
-                    <input
-                      type="password"
-                      name="password"
-                      value={loginForm.password}
-                      onChange={handleLoginChange}
-                      placeholder="••••••••"
-                    />
-                  </div>
-
-                  <button type="submit" className="btn btn-primary">
-                    Login
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {mode === 'register' && (
-              <div>
-                <h2 className="card-title">Create a new account</h2>
-                <form className="form" onSubmit={handleRegister}>
-                  <div className="form-group">
-                    <label>Email</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={registerForm.email}
-                      onChange={handleRegisterChange}
-                      placeholder="you@example.com"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Password</label>
-                    <input
-                      type="password"
-                      name="password"
-                      value={registerForm.password}
-                      onChange={handleRegisterChange}
-                      placeholder="Choose a password"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Full name</label>
-                    <input
-                      type="text"
-                      name="fullName"
-                      value={registerForm.fullName}
-                      onChange={handleRegisterChange}
-                      placeholder="Your full name"
-                    />
-                  </div>
-
-                  <button type="submit" className="btn btn-primary">
-                    Register
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {message && <p className="message">{message}</p>}
-          </div>
-        </main>
+          {mode === 'login' ? (
+            <form className="space-y-4" onSubmit={handleLogin}>
+              <input className="w-full p-2 border rounded" type="email" name="email" placeholder="Email" value={loginForm.email} onChange={handleLoginChange} required />
+              <input className="w-full p-2 border rounded" type="password" name="password" placeholder="Password" value={loginForm.password} onChange={handleLoginChange} required />
+              <button type="submit" className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700">Login</button>
+            </form>
+          ) : (
+            <form className="space-y-4" onSubmit={handleRegister}>
+              <input className="w-full p-2 border rounded" type="text" name="fullName" placeholder="Full Name" value={registerForm.fullName} onChange={handleRegisterChange} />
+              <input className="w-full p-2 border rounded" type="email" name="email" placeholder="Email" value={registerForm.email} onChange={handleRegisterChange} required />
+              <input className="w-full p-2 border rounded" type="password" name="password" placeholder="Password" value={registerForm.password} onChange={handleRegisterChange} required />
+              <button type="submit" className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700">Register</button>
+            </form>
+          )}
+          
+          {message && <p className="mt-4 text-center text-red-500">{message}</p>}
+        </div>
       </div>
     );
   }
 
-  // --- UI למסך אחרי התחברות (Dashboard) ---
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="app-header-inner">
-          <h1 className="app-title">Wedding Planner</h1>
-          <span className="app-subtitle">Dashboard</span>
-        </div>
-        <div className="user-info">
-          <span className="user-name">
-            {currentUser.full_name || currentUser.email}
-          </span>
-          <button className="btn btn-secondary btn-small" onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
-      </header>
-
-      <main className="app-main">
-        <div className="grid">
-          <section className="card">
-            <h2 className="card-title">Add Event</h2>
-            <p className="card-description">
-              Create a new event for this user (for example: wedding date, engagement party, meeting with hall, etc.).
-            </p>
-            <form className="form" onSubmit={handleCreateEvent}>
-              <div className="form-group">
-                <label>Title</label>
-                <input
-                  type="text"
-                  name="title"
-                  value={eventForm.title}
-                  onChange={handleEventChange}
-                  placeholder="Event title"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Event date</label>
-                <input
-                  type="date"
-                  name="eventDate"
-                  value={eventForm.eventDate}
-                  onChange={handleEventChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Description</label>
-                <textarea
-                  name="description"
-                  value={eventForm.description}
-                  onChange={handleEventChange}
-                  rows={3}
-                  placeholder="Short description (optional)"
-                />
-              </div>
-
-              <button type="submit" className="btn btn-primary">
-                Create Event
-              </button>
-            </form>
-          </section>
-
-          <section className="card">
-            <h2 className="card-title">Create Task</h2>
-            <p className="card-description">
-              Add a task for this user (for example: call photographer, check catering prices, send invitations).
-            </p>
-            <form className="form" onSubmit={handleCreateTask}>
-              <div className="form-group">
-                <label>Title</label>
-                <input
-                  type="text"
-                  name="title"
-                  value={taskForm.title}
-                  onChange={handleTaskChange}
-                  placeholder="Task title"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Due date</label>
-                <input
-                  type="date"
-                  name="dueDate"
-                  value={taskForm.dueDate}
-                  onChange={handleTaskChange}
-                />
-              </div>
-
-              <div className="form-group form-group-inline">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    name="isDone"
-                    checked={taskForm.isDone}
-                    onChange={handleTaskChange}
-                  />
-                  Task is already done
-                </label>
-              </div>
-
-              <button type="submit" className="btn btn-primary">
-                Create Task
-              </button>
-            </form>
-          </section>
-        </div>
-
-        {message && <p className="message message-bottom">{message}</p>}
-      </main>
-    </div>
+    <Router>
+      <Routes>
+        {/* נתיב ראשי: הדשבורד החדש שיצרנו */}
+        <Route path="/" element={<Dashboard currentUser={currentUser} onLogout={handleLogout} />} />
+        
+        {/* נתיב לרשימת המוזמנים: מקבל eventId מה-URL */}
+        <Route path="/events/:eventId/guests" element={<GuestList />} />
+        
+        {/* כל נתיב אחר יחזיר לדף הבית */}
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </Router>
   );
 }
 

@@ -8,6 +8,7 @@ const { connectMongo } = require('./db');
 const User = require('./models/User');
 const Event = require('./models/Event');
 const Task = require('./models/Task');
+const Guest = require('./models/Guest');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -115,6 +116,25 @@ app.post('/api/events', async (req, res) => {
   }
 });
 
+// --- Get Events for User ---
+// שימוש: GET /api/events?userId=...
+app.get('/api/events', async (req, res) => {
+  const { userId } = req.query;
+  
+  if (!userId) {
+    return res.status(400).json({ message: 'userId query param is required' });
+  }
+
+  try {
+    // שליפת אירועים ששייכים למשתמש הזה בלבד
+    const events = await Event.find({ user_id: userId }).sort({ event_date: 1 });
+    res.json(events.map(toPublic));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching events', error: err.message });
+  }
+});
+
 // --- Create Task ---
 app.post('/api/tasks', async (req, res) => {
   const { userId, title, dueDate, isDone } = req.body;
@@ -132,6 +152,102 @@ app.post('/api/tasks', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error creating task', error: err.message });
+  }
+});
+
+// --- Get Tasks for User ---
+// שימוש: GET /api/tasks?userId=...
+app.get('/api/tasks', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ message: 'userId required' });
+  try {
+    // שולפים את כל המשימות של המשתמש
+    const tasks = await Task.find({ user_id: userId }).sort({ due_date: 1 });
+    res.json(tasks.map(toPublic));
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching tasks', error: err.message });
+  }
+});
+
+// --- Get Guests for an Event ---
+// שימוש: GET /api/events/:eventId/guests
+app.get('/api/events/:eventId/guests', async (req, res) => {
+  const { eventId } = req.params;
+  try {
+    // שליפת כל המוזמנים ששייכים לאירוע הספציפי הזה
+    const guests = await Guest.find({ event_id: eventId }).sort({ created_at: -1 });
+    // המרת כל מוזמן לפורמט Public (עם id רגיל)
+    const publicGuests = guests.map(toPublic);
+    res.json(publicGuests);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching guests', error: err.message });
+  }
+});
+
+// --- Add Guest ---
+// שימוש: POST /api/guests
+app.post('/api/guests', async (req, res) => {
+  const { eventId, fullName, email, phone, amountInvited } = req.body;
+  
+  if (!eventId || !fullName) {
+    return res.status(400).json({ message: 'eventId and fullName are required' });
+  }
+
+  try {
+    const newGuest = await Guest.create({
+      event_id: eventId,
+      full_name: fullName,
+      email: email || null,
+      phone: phone || null,
+      amount_invited: amountInvited || 1,
+      rsvp_status: 'pending' // ברירת מחדל
+    });
+    res.status(201).json(toPublic(newGuest));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error adding guest', error: err.message });
+  }
+});
+
+// --- Update Guest RSVP / Details ---
+// שימוש: PUT /api/guests/:id
+app.put('/api/guests/:id', async (req, res) => {
+  const { id } = req.params;
+  const { rsvpStatus, amountInvited, fullName } = req.body; // אפשר לעדכן סטטוס, כמות, או שם
+
+  try {
+    const updateData = {};
+    if (rsvpStatus) updateData.rsvp_status = rsvpStatus;
+    if (amountInvited) updateData.amount_invited = amountInvited;
+    if (fullName) updateData.full_name = fullName;
+
+    const updatedGuest = await Guest.findByIdAndUpdate(id, updateData, { new: true });
+    
+    if (!updatedGuest) {
+      return res.status(404).json({ message: 'Guest not found' });
+    }
+    
+    res.json(toPublic(updatedGuest));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error updating guest', error: err.message });
+  }
+});
+
+// --- Delete Guest ---
+// שימוש: DELETE /api/guests/:id
+app.delete('/api/guests/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deleted = await Guest.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ message: 'Guest not found' });
+    }
+    res.json({ message: 'Guest deleted successfully', id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error deleting guest', error: err.message });
   }
 });
 
