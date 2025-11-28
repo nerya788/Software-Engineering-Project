@@ -117,7 +117,6 @@ app.post('/api/events', async (req, res) => {
 });
 
 // --- Get Events for User ---
-// שימוש: GET /api/events?userId=...
 app.get('/api/events', async (req, res) => {
   const { userId } = req.query;
   
@@ -126,7 +125,6 @@ app.get('/api/events', async (req, res) => {
   }
 
   try {
-    // שליפת אירועים ששייכים למשתמש הזה בלבד
     const events = await Event.find({ user_id: userId }).sort({ event_date: 1 });
     res.json(events.map(toPublic));
   } catch (err) {
@@ -156,12 +154,10 @@ app.post('/api/tasks', async (req, res) => {
 });
 
 // --- Get Tasks for User ---
-// שימוש: GET /api/tasks?userId=...
 app.get('/api/tasks', async (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ message: 'userId required' });
   try {
-    // שולפים את כל המשימות של המשתמש
     const tasks = await Task.find({ user_id: userId }).sort({ due_date: 1 });
     res.json(tasks.map(toPublic));
   } catch (err) {
@@ -169,74 +165,89 @@ app.get('/api/tasks', async (req, res) => {
   }
 });
 
+// ======================================================
+//                 GUEST ROUTES (החלק החשוב)
+// ======================================================
+
 // --- Get Guests for an Event ---
-// שימוש: GET /api/events/:eventId/guests
 app.get('/api/events/:eventId/guests', async (req, res) => {
   const { eventId } = req.params;
   try {
-    // שליפת כל המוזמנים ששייכים לאירוע הספציפי הזה
     const guests = await Guest.find({ event_id: eventId }).sort({ created_at: -1 });
-    // המרת כל מוזמן לפורמט Public (עם id רגיל)
-    const publicGuests = guests.map(toPublic);
-    res.json(publicGuests);
+    res.json(guests.map(toPublic));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error fetching guests', error: err.message });
   }
 });
 
-// --- Add Guest ---
-// שימוש: POST /api/guests
+// --- Add Guest (POST) ---
 app.post('/api/guests', async (req, res) => {
-  const { eventId, fullName, email, phone, amountInvited } = req.body;
-  
-  if (!eventId || !fullName) {
-    return res.status(400).json({ message: 'eventId and fullName are required' });
-  }
+  const { 
+    eventId, fullName, email, phone, side, 
+    amountInvited, mealOption, dietaryNotes, 
+    rsvpStatus // מקבלים מהפרונט ב-camelCase
+  } = req.body;
 
   try {
     const newGuest = await Guest.create({
       event_id: eventId,
       full_name: fullName,
-      email: email || null,
-      phone: phone || null,
-      amount_invited: amountInvited || 1,
-      rsvp_status: 'pending' // ברירת מחדל
+      email,
+      phone,
+      side: side || 'friend',
+      amount_invited: amountInvited,
+      meal_option: mealOption || 'standard',
+      dietary_notes: dietaryNotes,
+      rsvp_status: rsvpStatus || 'pending' // המרה ל-snake_case של ה-DB
     });
     res.status(201).json(toPublic(newGuest));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Error adding guest', error: err.message });
+    res.status(500).json({ message: 'Error adding guest' });
   }
 });
 
-// --- Update Guest RSVP / Details ---
-// שימוש: PUT /api/guests/:id
+// --- Update Guest (PUT) ---
 app.put('/api/guests/:id', async (req, res) => {
   const { id } = req.params;
-  const { rsvpStatus, amountInvited, fullName } = req.body; // אפשר לעדכן סטטוס, כמות, או שם
+  
+  // כאן אנחנו מפרקים את ה-Body כדי למפות את השדות נכון
+  const { 
+    fullName, email, phone, side, 
+    amountInvited, mealOption, dietaryNotes, 
+    rsvpStatus // הנה הבעיה שהייתה לך! הפרונט שולח את זה
+  } = req.body;
 
   try {
     const updateData = {};
-    if (rsvpStatus) updateData.rsvp_status = rsvpStatus;
-    if (amountInvited) updateData.amount_invited = amountInvited;
-    if (fullName) updateData.full_name = fullName;
-
-    const updatedGuest = await Guest.findByIdAndUpdate(id, updateData, { new: true });
     
-    if (!updatedGuest) {
+    // מעדכנים רק מה שנשלח
+    if (fullName !== undefined) updateData.full_name = fullName;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined) updateData.phone = phone;
+    if (side !== undefined) updateData.side = side;
+    if (amountInvited !== undefined) updateData.amount_invited = amountInvited;
+    if (mealOption !== undefined) updateData.meal_option = mealOption;
+    if (dietaryNotes !== undefined) updateData.dietary_notes = dietaryNotes;
+    
+    // --- התיקון הקריטי: מיפוי rsvpStatus ל-rsvp_status ---
+    if (rsvpStatus !== undefined) updateData.rsvp_status = rsvpStatus;
+
+    const updated = await Guest.findByIdAndUpdate(id, updateData, { new: true });
+    
+    if (!updated) {
       return res.status(404).json({ message: 'Guest not found' });
     }
-    
-    res.json(toPublic(updatedGuest));
+
+    res.json(toPublic(updated));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Error updating guest', error: err.message });
+    res.status(500).json({ message: 'Error updating guest' });
   }
 });
 
 // --- Delete Guest ---
-// שימוש: DELETE /api/guests/:id
 app.delete('/api/guests/:id', async (req, res) => {
   const { id } = req.params;
   try {
