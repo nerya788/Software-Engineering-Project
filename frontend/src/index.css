@@ -1,21 +1,3 @@
-/* איפוס בסיסי של הקונטיינר הראשי */
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-}
-
-/* רקע כללי – השארנו אותו כדי שלא יהיה לבן חלק */
-body {
-  background-color: #f3f4f6;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities; 

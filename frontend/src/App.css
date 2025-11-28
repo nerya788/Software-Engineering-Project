@@ -250,3 +250,73 @@ textarea {
   gap: 6px;
   font-size: 0.85rem;
 }
+
+
+.react-calendar {
+  width: 100% !important;
+  max-width: 100%;
+  background: white;
+  border: none !important;
+  font-family: inherit;
+  line-height: 1.125em;
+}
+
+/* ריווח הכותרת (חודש ושנה) */
+.react-calendar__navigation {
+  display: flex;
+  height: 44px;
+  margin-bottom: 10px;
+}
+
+.react-calendar__navigation button {
+  min-width: 44px;
+  background: none;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* סידור ימי השבוע (א, ב, ג...) */
+.react-calendar__month-view__weekdays {
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: bold;
+  font-size: 0.85em;
+  color: #6b7280; /* אפור */
+  margin-bottom: 5px;
+}
+
+/* הסרת קו תחתון מראשי התיבות של הימים */
+abbr[title] {
+  text-decoration: none !important;
+  cursor: default;
+}
+
+/* עיצוב כפתורי הימים */
+.react-calendar__tile {
+  max-width: 100%;
+  padding: 10px 6px;
+  background: none;
+  text-align: center;
+  line-height: 16px;
+  font-size: 0.9em;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+  background-color: #f3f4f6;
+}
+
+/* סימון היום הנוכחי */
+.react-calendar__tile--now {
+  background: #fdf2f8 !important; /* ורדרד בהיר */
+  color: #db2777;
+  font-weight: bold;
+}
+
+/* סימון היום שנבחר */
+.react-calendar__tile--active {
+  background: #9333ea !important; /* סגול */
+  color: white !important;
+}
