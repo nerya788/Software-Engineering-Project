@@ -3,12 +3,13 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import Countdown from './Countdown'; // ייבוא הספירה לאחור
+import Countdown from './Countdown';
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [date, setDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState('month'); // 'month' or 'week'
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   
@@ -36,7 +37,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
     }
   };
 
-  // חישוב האירוע הקרוב ביותר לספירה לאחור
   const nextEvent = events
     .filter(e => new Date(e.event_date) > new Date().setHours(0,0,0,0))
     .sort((a, b) => new Date(a.event_date) - new Date(b.event_date))[0];
@@ -68,10 +68,20 @@ const Dashboard = ({ currentUser, onLogout }) => {
     return new Date(task.due_date).toDateString() === date.toDateString();
   });
 
+  const eventsForSelectedDate = events.filter(e => 
+    new Date(e.event_date).toDateString() === date.toDateString()
+  );
+
   const tileContent = ({ date, view }) => {
     if (view === 'month') {
       const hasTask = tasks.some(t => t.due_date && new Date(t.due_date).toDateString() === date.toDateString());
-      return hasTask ? <div className="h-1.5 w-1.5 bg-purple-500 rounded-full mx-auto mt-1"></div> : null;
+      const hasEvent = events.some(e => new Date(e.event_date).toDateString() === date.toDateString());
+      return (
+        <div className="flex justify-center gap-1 mt-1">
+          {hasTask && <div className="h-1.5 w-1.5 bg-purple-500 rounded-full" title="יש משימה"></div>}
+          {hasEvent && <div className="h-1.5 w-1.5 bg-pink-500 rounded-full" title="יש אירוע"></div>}
+        </div>
+      );
     }
   };
 
@@ -106,17 +116,76 @@ const Dashboard = ({ currentUser, onLogout }) => {
           
           {/* לוח שנה (צד ימין) */}
           <div className="lg:col-span-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 h-fit">
-            <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">🗓️ לוח שנה</h2>
+            
+            {/* כפתורי החלפת תצוגה */}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">🗓️ לוח שנה</h2>
+              <div className="bg-gray-100 p-1 rounded-lg flex text-sm">
+                <button 
+                  onClick={() => setViewMode('month')}
+                  className={`px-3 py-1 rounded-md transition ${viewMode === 'month' ? 'bg-white shadow text-purple-600 font-bold' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  חודש
+                </button>
+                <button 
+                  onClick={() => setViewMode('week')}
+                  className={`px-3 py-1 rounded-md transition ${viewMode === 'week' ? 'bg-white shadow text-purple-600 font-bold' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  שבוע
+                </button>
+              </div>
+            </div>
+
             <div className="ltr-calendar"> 
-              <Calendar onChange={setDate} value={date} tileContent={tileContent} locale="he-IL" />
+              {viewMode === 'month' ? (
+                /* תצוגה חודשית רגילה */
+                <Calendar onChange={setDate} value={date} tileContent={tileContent} locale="he-IL" />
+              ) : (
+                /* תצוגה שבועית חדשה */
+                <div className="flex flex-col gap-2">
+                  {Array.from({ length: 7 }).map((_, i) => {
+                    const curr = new Date(date);
+                    // מוצא את יום ראשון של השבוע הנוכחי
+                    const firstDay = curr.getDate() - curr.getDay(); 
+                    const weekDate = new Date(curr.setDate(firstDay + i));
+                    const isSelected = weekDate.toDateString() === date.toDateString();
+
+                    const hasEv = events.some(e => new Date(e.event_date).toDateString() === weekDate.toDateString());
+                    const hasTask = tasks.some(t => t.due_date && new Date(t.due_date).toDateString() === weekDate.toDateString());
+
+                    return (
+                      <div 
+                        key={i} 
+                        onClick={() => setDate(weekDate)}
+                        className={`p-3 rounded-xl border cursor-pointer transition flex justify-between items-center
+                          ${isSelected ? 'bg-purple-50 border-purple-200 ring-1 ring-purple-100' : 'bg-gray-50 border-gray-100 hover:bg-white'}
+                        `}
+                      >
+                        <div className="flex items-center gap-3">
+                           <span className={`font-bold ${isSelected ? 'text-purple-700' : 'text-gray-600'}`}>
+                             {weekDate.toLocaleDateString('he-IL', { weekday: 'long' })}
+                           </span>
+                           <span className="text-xs text-gray-400">
+                             {weekDate.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}
+                           </span>
+                        </div>
+                        <div className="flex gap-1">
+                          {hasTask && <div className="w-2 h-2 bg-purple-500 rounded-full" title="משימה"></div>}
+                          {hasEv && <div className="w-2 h-2 bg-pink-500 rounded-full" title="אירוע"></div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* משימות ליום הנבחר (צד שמאל - רחב יותר) */}
+          {/* משימות ליום הנבחר (צד שמאל) */}
           <div className="lg:col-span-8 bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col min-h-[500px]">
             <div className="flex justify-between items-end mb-6 border-b border-gray-100 pb-4">
               <div>
-                <p className="text-gray-500 text-sm mb-1">משימות עבור</p>
+                <p className="text-gray-500 text-sm mb-1">משימות ואירועים עבור</p>
                 <h2 className="text-2xl font-bold text-gray-800">
                    {date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </h2>
@@ -127,12 +196,30 @@ const Dashboard = ({ currentUser, onLogout }) => {
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-              {tasksForSelectedDate.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-3 text-2xl">☕</div>
-                  <p className="text-lg font-medium">אין משימות ליום זה</p>
-                  <p className="text-sm opacity-70">יום חופש! או שתוסיף משימה למטה?</p>
+              {/* --- הצגת אירועים ליום זה --- */}
+              {eventsForSelectedDate.map(ev => (
+                <div key={ev.id} className="p-4 bg-gradient-to-r from-pink-50 to-white border-r-4 border-pink-500 rounded-xl shadow-sm mb-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                        <h3 className="font-bold text-gray-800">{ev.title}</h3>
+                        <p className="text-sm text-gray-500">{ev.description || 'אין תיאור'}</p>
+                    </div>
+                    <Link to={`/events/${ev.id}/edit`} className="text-xs bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">
+                        ערוך
+                    </Link>
+                  </div>
                 </div>
+              ))}
+              
+              {/* --- הצגת משימות --- */}
+              {tasksForSelectedDate.length === 0 ? (
+                eventsForSelectedDate.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-3 text-2xl">☕</div>
+                    <p className="text-lg font-medium">אין משימות ליום זה</p>
+                    <p className="text-sm opacity-70">יום חופש! או שתוסיף משימה למטה?</p>
+                  </div>
+                )
               ) : (
                 tasksForSelectedDate.map(task => (
                   <div key={task.id} className="group flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-2xl hover:bg-white hover:shadow-md hover:border-purple-100 transition duration-200">

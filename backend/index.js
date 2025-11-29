@@ -116,16 +116,27 @@ app.post('/api/events', async (req, res) => {
   }
 });
 
+
 // --- Get Events for User ---
 app.get('/api/events', async (req, res) => {
-  const { userId } = req.query;
+  const { userId, start, end } = req.query; // הוספנו תמיכה ב-start ו-end
   
   if (!userId) {
     return res.status(400).json({ message: 'userId query param is required' });
   }
 
   try {
-    const events = await Event.find({ user_id: userId }).sort({ event_date: 1 });
+    const filter = { user_id: userId };
+    
+    // אם נשלחו תאריכים, נסנן לפיהם
+    if (start && end) {
+      filter.event_date = {
+        $gte: new Date(start), // גדול או שווה לתאריך התחלה
+        $lte: new Date(end)    // קטן או שווה לתאריך סיום
+      };
+    }
+
+    const events = await Event.find(filter).sort({ event_date: 1 });
     res.json(events.map(toPublic));
   } catch (err) {
     console.error(err);
@@ -184,6 +195,21 @@ app.put('/api/events/:id', async (req, res) => {
     console.error(err);
     // אם ה-ID לא תקין או יש שגיאת DB אחרת
     res.status(500).json({ message: 'Error updating event', error: err.message });
+  }
+});
+
+// --- Delete Event ---
+app.delete('/api/events/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deleted = await Event.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+    res.json({ message: 'Event deleted successfully', id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error deleting event', error: err.message });
   }
 });
 
