@@ -1,5 +1,6 @@
 // backend/index.js
 require('dotenv').config();
+require('./scheduler');
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -9,6 +10,7 @@ const User = require('./models/User');
 const Event = require('./models/Event');
 const Task = require('./models/Task');
 const Guest = require('./models/Guest');
+const Notification = require('./models/Notification');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -340,6 +342,37 @@ app.delete('/api/guests/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error deleting guest', error: err.message });
+  }
+});
+
+// ======================================================
+//                NOTIFICATIONS ROUTES
+// ======================================================
+
+// --- Get Notifications (רק את אלו שלא נקראו) ---
+app.get('/api/notifications', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ message: 'userId required' });
+  
+  try {
+    // מביא התראות שלא נקראו, החדשות ביותר בהתחלה
+    const notifications = await Notification.find({ user_id: userId, is_read: false })
+      .sort({ created_at: -1 });
+    res.json(notifications.map(toPublic));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching notifications' });
+  }
+});
+
+// --- Mark Notification as Read (עדכון ל"נקרא") ---
+app.put('/api/notifications/:id/read', async (req, res) => {
+  try {
+    await Notification.findByIdAndUpdate(req.params.id, { is_read: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error updating notification' });
   }
 });
 
