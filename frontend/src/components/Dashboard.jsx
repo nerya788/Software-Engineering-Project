@@ -3,8 +3,9 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { Bell } from 'lucide-react'; // <--- הוספנו את הפעמון
+import { Bell, Settings } from 'lucide-react'; // הוספנו את Settings
 import Countdown from './Countdown';
+
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const [events, setEvents] = useState([]);
@@ -161,6 +162,9 @@ const Dashboard = ({ currentUser, onLogout }) => {
              {/* --------------------------- */}
 
              <span className="text-gray-600 font-medium hidden md:inline">היי, {currentUser.full_name}</span>
+             <Link to="/settings" className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition" title="הגדרות">
+               <Settings size={20} />
+             </Link>
              <button onClick={onLogout} className="text-sm bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-700 px-4 py-2 rounded-full transition border border-gray-200">
                יציאה
              </button>

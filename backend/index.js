@@ -98,6 +98,30 @@ app.post('/api/users/login', async (req, res) => {
   }
 });
 
+
+// --- Update User Settings (Notification Preferences) ---
+app.put('/api/users/:id/settings', async (req, res) => {
+  const { id } = req.params;
+  const { notificationDays } = req.body;
+
+  try {
+    // עדכון השדה הספציפי settings.notification_days
+    const user = await User.findByIdAndUpdate(
+      id,
+      { 'settings.notification_days': notificationDays },
+      { new: true }
+    );
+    
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.json(toPublic(user));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error updating settings' });
+  }
+});
+
+
 // --- Add Event ---
 app.post('/api/events', async (req, res) => {
   const { userId, title, eventDate, description } = req.body;
