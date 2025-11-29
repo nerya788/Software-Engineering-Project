@@ -133,6 +133,61 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
+
+// --- Get Single Event --- 
+app.get('/api/events/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // שליפת האירוע לפי ה-ID
+    const event = await Event.findById(id); 
+    
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+    
+    // מחזירים את האובייקט בפורמט הציבורי (עם 'id' במקום '_id')
+    res.json(toPublic(event));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching event', error: err.message });
+  }
+});
+
+
+// --- Update Event ---
+app.put('/api/events/:id', async (req, res) => {
+  const { id } = req.params;
+  const { title, eventDate, description } = req.body; // userId לא צריך להשתנות
+
+  try {
+    const updateData = {};
+    // בודקים אילו שדות נשלחו ומכינים את הנתונים לעדכון (Map from camelCase to snake_case)
+    if (title !== undefined) updateData.title = title;
+    if (eventDate !== undefined) updateData.event_date = new Date(eventDate);
+    if (description !== undefined) updateData.description = description;
+
+    // אופציה: להוסיף בדיקה מינימלית אם אין שדות לעדכון
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No fields provided for update' });
+    }
+
+    // מבצעים עדכון ב-MongoDB, ה-`{ new: true }` מחזיר את המסמך המעודכן
+    const updated = await Event.findByIdAndUpdate(id, updateData, { new: true });
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    // מחזירים את האובייקט המעודכן בפורמט הציבורי
+    res.json(toPublic(updated));
+  } catch (err) {
+    console.error(err);
+    // אם ה-ID לא תקין או יש שגיאת DB אחרת
+    res.status(500).json({ message: 'Error updating event', error: err.message });
+  }
+});
+
+
 // --- Create Task ---
 app.post('/api/tasks', async (req, res) => {
   const { userId, title, dueDate, isDone } = req.body;
