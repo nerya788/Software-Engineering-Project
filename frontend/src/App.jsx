@@ -3,9 +3,11 @@ import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
-import Dashboard from './components/Dashboard';
-import GuestList from './components/GuestList';
-import EditEventForm from './components/EditEventForm';
+// ייבוא הרכיבים
+import Dashboard from './components/Dashboard.jsx';
+import GuestList from './components/GuestList.jsx';
+import EditEventForm from './components/EditEventForm.jsx';
+import Settings from './components/Settings.jsx';
 
 function App() {
   const [mode, setMode] = useState('login');
@@ -21,7 +23,7 @@ function App() {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:4000/api/users/register', registerForm);
+      await axios.post('http://localhost:4000/api/users/register', registerForm);
       setMessage(`User registered! Please login.`);
       setMode('login');
       setRegisterForm({ email: '', password: '', fullName: '' });
@@ -45,7 +47,6 @@ function App() {
     setCurrentUser(null);
     setMode('login');
   };
-
 
   if (!currentUser) {
     return (
@@ -82,16 +83,13 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* נתיב ראשי: הדשבורד החדש שיצרנו */}
         <Route path="/" element={<Dashboard currentUser={currentUser} onLogout={handleLogout} />} />
-        
-        {/* נתיב לרשימת המוזמנים: מקבל eventId מה-URL */}
         <Route path="/events/:eventId/guests" element={<GuestList />} />
-
-    
         <Route path="/events/:eventId/edit" element={<EditEventForm currentUser={currentUser} />} />
         
-        {/* כל נתיב אחר יחזיר לדף הבית */}
+        {/* התיקון כאן: העברת הפונקציה לעדכון המשתמש */}
+        <Route path="/settings" element={<Settings currentUser={currentUser} onUpdateUser={setCurrentUser} />} />
+
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

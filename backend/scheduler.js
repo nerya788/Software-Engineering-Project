@@ -1,47 +1,57 @@
 const cron = require('node-cron');
 const Event = require('./models/Event');
 const Notification = require('./models/Notification');
+const User = require('./models/User'); // מייבאים את מודל המשתמש
 
-// הפונקציה תרוץ כל יום בחצות (00:00)
-// הסימון '0 0 * * *' אומר: דקה 0, שעה 0
+// רץ כל יום בחצות
 cron.schedule('0 0 * * *', async () => {
-  console.log('⏰ Scheduler running: Checking for upcoming events...');
+  console.log('⏰ Scheduler running: Checking custom preferences...');
   
   try {
-    // חישוב התאריך של מחר
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    
-    // איפוס שעות כדי להשוות רק תאריכים
-    const startOfTomorrow = new Date(tomorrow.setHours(0, 0, 0, 0));
-    const endOfTomorrow = new Date(tomorrow.setHours(23, 59, 59, 999));
+    // 1. מביאים את כל המשתמשים
+    const users = await User.find({});
 
-    // מציאת אירועים שקורים מחר
-    const upcomingEvents = await Event.find({
-      event_date: {
-        $gte: startOfTomorrow,
-        $lte: endOfTomorrow
-      }
-    });
-
-    for (const event of upcomingEvents) {
-      // בדיקה אם כבר קיימת התראה לאירוע הזה כדי למנוע כפילויות
-      // (בדיקה פשוטה לפי תוכן ההודעה והמשתמש)
-      const message = `תזכורת: האירוע "${event.title}" מתקיים מחר!`;
+    for (const user of users) {
+      // בודקים מה ההגדרה של המשתמש (ברירת מחדל: 1 יום)
+      const daysBefore = user.settings?.notification_days ?? 1;
       
-      const exists = await Notification.findOne({
-        user_id: event.user_id,
-        message: message
+      // אם המשתמש ביטל התראות (למשל קבע -1), מדלגים
+      if (daysBefore < 0) continue;
+
+      // 2. מחשבים את תאריך היעד עבור המשתמש הזה
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + daysBefore);
+      
+      const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+
+      // 3. מחפשים אירועים של המשתמש שנופלים ביום הזה
+      const events = await Event.find({
+        user_id: user._id,
+        event_date: {
+          $gte: startOfDay,
+          $lte: endOfDay
+        }
       });
 
-      if (!exists) {
-        await Notification.create({
-          user_id: event.user_id,
-          message: message,
-          type: 'reminder'
+      // 4. יוצרים התראות
+      for (const event of events) {
+        const message = `תזכורת: האירוע "${event.title}" מתקיים בעוד ${daysBefore} ימים!`;
+        
+        // מונעים כפילויות
+        const exists = await Notification.findOne({
+          user_id: user._id,
+          message: message
         });
-        console.log(`🔔 Notification created for event: ${event.title}`);
+
+        if (!exists) {
+          await Notification.create({
+            user_id: user._id,
+            message: message,
+            type: 'reminder'
+          });
+          console.log(`🔔 Notification created for ${user.email}: ${event.title}`);
+        }
       }
     }
   } catch (err) {
