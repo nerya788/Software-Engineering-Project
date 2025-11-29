@@ -3,15 +3,14 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { Bell, Settings } from 'lucide-react'; // הוספנו את Settings
-import Countdown from './Countdown';
-
+import { Bell, Settings } from 'lucide-react'; // תיקון: ייבוא מרוכז ונקי
+import Countdown from './Countdown.jsx'; // וודא שהקובץ קיים בשם הזה
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [date, setDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month');
+  const [viewMode, setViewMode] = useState('month'); // 'month' or 'week'
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   
@@ -23,8 +22,23 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // טעינה ראשונית
   useEffect(() => {
     if (currentUser?.id) fetchData();
+  }, [currentUser]);
+
+  // מנגנון בדיקת התראות אוטומטי (Polling) כל 30 שניות
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await axios.get(`http://localhost:4000/api/notifications?userId=${currentUser.id}`);
+        setNotifications(res.data);
+      } catch (err) {
+        console.error('Background notification check failed', err);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
   }, [currentUser]);
 
   const fetchData = async () => {
@@ -46,6 +60,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
     }
   };
 
+  // חישוב האירוע הקרוב ביותר עבור ה-Countdown
   const nextEvent = events
     .filter(e => new Date(e.event_date) > new Date().setHours(0,0,0,0))
     .sort((a, b) => new Date(a.event_date) - new Date(b.event_date))[0];
@@ -159,12 +174,14 @@ const Dashboard = ({ currentUser, onLogout }) => {
                   </div>
                 )}
              </div>
-             {/* --------------------------- */}
 
              <span className="text-gray-600 font-medium hidden md:inline">היי, {currentUser.full_name}</span>
+             
+             {/* כפתור הגדרות */}
              <Link to="/settings" className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition" title="הגדרות">
                <Settings size={20} />
              </Link>
+
              <button onClick={onLogout} className="text-sm bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-700 px-4 py-2 rounded-full transition border border-gray-200">
                יציאה
              </button>
@@ -174,10 +191,10 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         
-        {/* --- 1. ספירה לאחור --- */}
+        {/* שימוש בקומפוננטת הספירה לאחור החדשה */}
         {nextEvent && <Countdown targetDate={nextEvent.event_date} title={nextEvent.title} />}
 
-        {/* --- 2. אזור ראשי: לוח שנה ומשימות --- */}
+        {/* --- אזור ראשי: לוח שנה ומשימות --- */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
           
           {/* לוח שנה (צד ימין) */}
