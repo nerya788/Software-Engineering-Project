@@ -3,19 +3,24 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
+import { Bell } from 'lucide-react'; // <--- הוספנו את הפעמון
 import Countdown from './Countdown';
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [date, setDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month'); // 'month' or 'week'
+  const [viewMode, setViewMode] = useState('month');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   
   // טפסים
   const [eventForm, setEventForm] = useState({ title: '', eventDate: '', description: '' });
   const [taskForm, setTaskForm] = useState({ title: '', dueDate: '', isDone: false });
+
+  // משתנים להתראות
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     if (currentUser?.id) fetchData();
@@ -24,12 +29,15 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [eventsRes, tasksRes] = await Promise.all([
+      const [eventsRes, tasksRes, notifRes] = await Promise.all([
         axios.get(`http://localhost:4000/api/events?userId=${currentUser.id}`),
-        axios.get(`http://localhost:4000/api/tasks?userId=${currentUser.id}`)
+        axios.get(`http://localhost:4000/api/tasks?userId=${currentUser.id}`),
+        axios.get(`http://localhost:4000/api/notifications?userId=${currentUser.id}`)
       ]);
+      
       setEvents(eventsRes.data);
       setTasks(tasksRes.data);
+      setNotifications(notifRes.data);
       setLoading(false);
     } catch (err) {
       console.error(err);
@@ -61,6 +69,15 @@ const Dashboard = ({ currentUser, onLogout }) => {
       setMessage('המשימה נוצרה בהצלחה! ✅');
       setTimeout(() => setMessage(''), 3000);
     } catch (err) { setMessage('שגיאה ביצירת משימה'); }
+  };
+
+  const markAsRead = async (id) => {
+    try {
+      await axios.put(`http://localhost:4000/api/notifications/${id}/read`);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (err) {
+      console.error('Error marking notification as read', err);
+    }
   };
 
   const tasksForSelectedDate = tasks.filter(task => {
@@ -97,7 +114,52 @@ const Dashboard = ({ currentUser, onLogout }) => {
               Wedding Planner
             </h1>
           </div>
+
           <div className="flex items-center gap-4">
+             {/* --- כפתור התראות (פעמון) --- */}
+             <div className="relative">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 rounded-full hover:bg-gray-100 transition text-gray-600"
+                >
+                  <Bell size={24} />
+                  {notifications.length > 0 && (
+                    <span className="absolute top-0 right-0 h-3 w-3 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+                  )}
+                </button>
+
+                {/* חלונית ההתראות */}
+                {showNotifications && (
+                  <div className="absolute left-0 mt-3 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50">
+                    <div className="p-3 border-b bg-gray-50 font-bold text-gray-700 flex justify-between items-center">
+                      <span>התראות</span>
+                      <span className="text-xs font-normal text-gray-500">{notifications.length} חדשות</span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                      {notifications.length === 0 ? (
+                        <div className="p-6 text-center text-gray-400 text-sm">אין התראות חדשות 🎉</div>
+                      ) : (
+                        notifications.map(n => (
+                          <div key={n.id} className="p-3 border-b hover:bg-purple-50 transition flex justify-between items-start gap-3">
+                            <div>
+                              <p className="text-sm text-gray-700 font-medium">{n.message}</p>
+                              <p className="text-xs text-gray-400 mt-1">{new Date(n.created_at).toLocaleDateString('he-IL')}</p>
+                            </div>
+                            <button 
+                              onClick={() => markAsRead(n.id)} 
+                              className="text-xs text-purple-600 hover:text-purple-800 font-bold shrink-0 bg-purple-100 px-2 py-1 rounded-md"
+                            >
+                              ✓
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+             </div>
+             {/* --------------------------- */}
+
              <span className="text-gray-600 font-medium hidden md:inline">היי, {currentUser.full_name}</span>
              <button onClick={onLogout} className="text-sm bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-700 px-4 py-2 rounded-full transition border border-gray-200">
                יציאה
@@ -117,7 +179,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
           {/* לוח שנה (צד ימין) */}
           <div className="lg:col-span-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 h-fit">
             
-            {/* כפתורי החלפת תצוגה */}
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">🗓️ לוח שנה</h2>
               <div className="bg-gray-100 p-1 rounded-lg flex text-sm">
@@ -138,14 +199,11 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
             <div className="ltr-calendar"> 
               {viewMode === 'month' ? (
-                /* תצוגה חודשית רגילה */
                 <Calendar onChange={setDate} value={date} tileContent={tileContent} locale="he-IL" />
               ) : (
-                /* תצוגה שבועית חדשה */
                 <div className="flex flex-col gap-2">
                   {Array.from({ length: 7 }).map((_, i) => {
                     const curr = new Date(date);
-                    // מוצא את יום ראשון של השבוע הנוכחי
                     const firstDay = curr.getDate() - curr.getDay(); 
                     const weekDate = new Date(curr.setDate(firstDay + i));
                     const isSelected = weekDate.toDateString() === date.toDateString();
@@ -196,7 +254,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-              {/* --- הצגת אירועים ליום זה --- */}
               {eventsForSelectedDate.map(ev => (
                 <div key={ev.id} className="p-4 bg-gradient-to-r from-pink-50 to-white border-r-4 border-pink-500 rounded-xl shadow-sm mb-3">
                   <div className="flex justify-between items-start">
@@ -211,7 +268,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
                 </div>
               ))}
               
-              {/* --- הצגת משימות --- */}
               {tasksForSelectedDate.length === 0 ? (
                 eventsForSelectedDate.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400">
