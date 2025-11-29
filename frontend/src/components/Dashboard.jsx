@@ -183,6 +183,13 @@ const Dashboard = ({ currentUser, onLogout }) => {
                   >
                     <span>📋</span> ניהול רשימת מוזמנים
                   </Link>
+
+                  <Link 
+                    to={`/events/${ev.id}/edit`} 
+                    className="flex items-center justify-center gap-2 w-full bg-white border border-gray-200 text-gray-700 font-medium py-2 rounded-xl hover:bg-gray-50 transition mt-3"
+                  >
+                    <span>✏️</span> עריכת פרטים
+                  </Link>
                 </div>
               ))}
             </div>

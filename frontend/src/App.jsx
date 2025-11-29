@@ -5,6 +5,7 @@ import './App.css';
 
 import Dashboard from './components/Dashboard';
 import GuestList from './components/GuestList';
+import EditEventForm from './components/EditEventForm';
 
 function App() {
   const [mode, setMode] = useState('login');
@@ -86,6 +87,9 @@ function App() {
         
         {/* נתיב לרשימת המוזמנים: מקבל eventId מה-URL */}
         <Route path="/events/:eventId/guests" element={<GuestList />} />
+
+    
+        <Route path="/events/:eventId/edit" element={<EditEventForm currentUser={currentUser} />} />
         
         {/* כל נתיב אחר יחזיר לדף הבית */}
         <Route path="*" element={<Navigate to="/" />} />
