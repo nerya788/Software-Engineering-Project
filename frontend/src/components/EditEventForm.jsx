@@ -38,6 +38,19 @@ const EditEventForm = ({ currentUser }) => {
         }
     };
 
+    // פונקציה למחיקת אירוע
+    const handleDelete = async () => {
+        if (!window.confirm('האם אתה בטוח שברצונך למחוק את האירוע?')) return;
+        
+        try {
+            await axios.delete(`http://localhost:4000/api/events/${eventId}`);
+            setMessage('האירוע נמחק! מעביר לדשבורד...');
+            setTimeout(() => navigate('/'), 1500);
+        } catch (err) {
+            setMessage('שגיאה במחיקת האירוע');
+        }
+    };
+
     return (
         <div className="p-6 max-w-md mx-auto bg-white rounded shadow mt-10">
             <h2 className="text-2xl font-bold mb-4">עריכת אירוע</h2>
@@ -55,6 +68,14 @@ const EditEventForm = ({ currentUser }) => {
                     placeholder="תיאור" className="w-full border p-2"
                     value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} 
                 />
+                {/* כפתור מחיקה */}
+                <button 
+                    type="button" 
+                    onClick={handleDelete} 
+                    className="bg-red-500 text-white px-4 py-2 rounded w-full mt-2 hover:bg-red-600"
+                >
+                    מחק אירוע 🗑️
+                </button>
                 <button type="submit" className="bg-purple-600 text-white px-4 py-2 rounded w-full">שמור שינויים</button>
             </form>
             <button onClick={() => navigate('/')} className="block mt-4 text-center text-gray-500 w-full">ביטול</button>
