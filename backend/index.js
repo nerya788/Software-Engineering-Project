@@ -1,6 +1,5 @@
-const http = require('http'); // ייבוא מודול HTTP
-const { Server } = require('socket.io'); // ייבוא Socket.io
-
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -11,10 +10,7 @@ const User = require('./models/User');
 const Event = require('./models/Event');
 const Task = require('./models/Task');
 const Guest = require('./models/Guest');
-const Notification = require('./models/Notification'); // ייבוא מודל התראות
-
-// הפעלת ה-Scheduler (כדי שיוכל לייצר התראות)
-require('./scheduler');
+const Notification = require('./models/Notification');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -30,30 +26,29 @@ const io = new Server(server, {
   },
 });
 
-// ייצוא אובייקט ה-io כדי שנוכל לשדר מראוטרים אחרים
+// ייצוא אובייקט ה-io (למקרה שנצטרך אותו בקבצים אחרים)
 module.exports.io = io;
 
-
-// CORS פתוח לפיתוח
+// CORS & Middleware
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.set('trust proxy', 1);
 
-// Helper: להחזיר id כמחרוזת במקום _id
+// Helper function
 function toPublic(doc) {
-  if (!doc) return doc;
-  const o = doc.toObject ? doc.toObject() : doc;
-  o.id = String(o._id);
-  delete o._id;
-  delete o.__v;
-  return o;
+  if (!doc) return doc;
+  const o = doc.toObject ? doc.toObject() : doc;
+  o.id = String(o._id);
+  delete o._id;
+  delete o.__v;
+  return o;
 }
 
 // Socket.io - טיפול בחיבורים
 io.on('connection', (socket) => {
   console.log(`🔌 User connected: ${socket.id}`);
   
-  // ברגע שהמשתמש שולח את ה-userId שלו, אנחנו מחברים אותו ל'חדר' שלו
+  // הרשמת המשתמש ל"חדר" שלו
   socket.on('register_user', (userId) => {
     socket.join(userId);
     console.log(`   --> User ${userId} joined room`);
@@ -64,376 +59,313 @@ io.on('connection', (socket) => {
   });
 });
 
-require('./scheduler')(io);
+// --- הפעלת ה-Scheduler עם ה-IO (עבור התראות) ---
+require('./scheduler')(io); 
 
 
-// ---- Health routes (לניטור מהיר) ----
+// ================= ROUTES =================
+
 const healthHandler = (req, res) => {
-  res.status(200).json({
-    ok: true,
-    db: mongoose.connection?.name || null,
-    state: mongoose.connection?.readyState ?? null, // 1=connected
-    uptime: process.uptime(),
-  });
+  res.status(200).json({
+    ok: true,
+    db: mongoose.connection?.name || null,
+    state: mongoose.connection?.readyState ?? null,
+    uptime: process.uptime(),
+  });
 };
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
-// --- Users: exists (בדיקה מהירה אם מייל קיים) ---
+// --- Auth Routes ---
+
 app.get('/api/users/exists', async (req, res) => {
-  try {
-    const email = (req.query.email || '').toLowerCase().trim();
-    if (!email) return res.status(400).json({ message: 'email is required' });
-    const exists = await User.exists({ email });
-    return res.json({ email, exists: !!exists });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'server error', error: err.message });
-  }
+  try {
+    const email = (req.query.email || '').toLowerCase().trim();
+    if (!email) return res.status(400).json({ message: 'email is required' });
+    const exists = await User.exists({ email });
+    return res.json({ email, exists: !!exists });
+  } catch (err) {
+    return res.status(500).json({ message: 'server error', error: err.message });
+  }
 });
 
-// --- Register ---
 app.post('/api/users/register', async (req, res) => {
-  let { email, password, fullName } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ message: 'email and password are required' });
-  }
-  email = String(email).toLowerCase().trim();
-  try {
-    const user = await User.create({
-      email,
-      password_hash: password, // בשלב זה ללא הצפנה
-      full_name: fullName || null,
-    });
-    res.status(201).json(toPublic(user));
-  } catch (err) {
-    if (err && err.code === 11000) {
-      return res.status(409).json({ message: 'Email already exists' });
-    }
-    console.error(err);
-    res.status(500).json({ message: 'Error registering user', error: err.message });
-  }
+  let { email, password, fullName } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'email and password are required' });
+  }
+  email = String(email).toLowerCase().trim();
+  try {
+    const user = await User.create({
+      email,
+      password_hash: password,
+      full_name: fullName || null,
+    });
+    res.status(201).json(toPublic(user));
+  } catch (err) {
+    if (err && err.code === 11000) {
+      return res.status(409).json({ message: 'Email already exists' });
+    }
+    res.status(500).json({ message: 'Error registering user', error: err.message });
+  }
 });
 
-// --- Login ---
 app.post('/api/users/login', async (req, res) => {
-  let { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ message: 'email and password are required' });
-  }
-  email = String(email).toLowerCase().trim();
-  try {
-    const user = await User.findOne({ email, password_hash: password }).lean();
-    if (!user) return res.status(401).json({ message: 'Invalid email or password' });
-    user.id = String(user._id);
-    delete user._id;
-    delete user.__v;
-    res.json(user);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error logging in', error: err.message });
-  }
+  let { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'email and password are required' });
+  }
+  email = String(email).toLowerCase().trim();
+  try {
+    const user = await User.findOne({ email, password_hash: password }).lean();
+    if (!user) return res.status(401).json({ message: 'Invalid email or password' });
+    user.id = String(user._id);
+    delete user._id;
+    delete user.__v;
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Error logging in', error: err.message });
+  }
 });
 
-// --- Update User Settings (Notification Preferences) ---
 app.put('/api/users/:id/settings', async (req, res) => {
   const { id } = req.params;
   const { notificationDays } = req.body;
-
   try {
     const user = await User.findByIdAndUpdate(
       id,
       { 'settings.notification_days': notificationDays },
       { new: true }
     );
-    
     if (!user) return res.status(404).json({ message: 'User not found' });
-
     res.json(toPublic(user));
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: 'Error updating settings' });
   }
 });
 
+// --- Event Routes ---
 
-// --- Add Event ---
 app.post('/api/events', async (req, res) => {
-  const { userId, title, eventDate, description } = req.body;
-  if (!userId || !title || !eventDate) {
-    return res.status(400).json({ message: 'userId, title and eventDate are required' });
-  }
-  try {
-    const ev = await Event.create({
-      user_id: userId,
-      title,
-      event_date: new Date(eventDate),
-      description: description || null,
-    });
-    res.status(201).json(toPublic(ev));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error creating event', error: err.message });
-  }
+  const { userId, title, eventDate, description } = req.body;
+  if (!userId || !title || !eventDate) {
+    return res.status(400).json({ message: 'userId, title and eventDate are required' });
+  }
+  try {
+    const ev = await Event.create({
+      user_id: userId,
+      title,
+      event_date: new Date(eventDate),
+      description: description || null,
+    });
+    // שידור לסנכרון חלונות
+    io.to(userId).emit('data_changed');
+    res.status(201).json(toPublic(ev));
+  } catch (err) {
+    res.status(500).json({ message: 'Error creating event', error: err.message });
+  }
 });
 
-// --- Get Events for User (Updated) ---
 app.get('/api/events', async (req, res) => {
-  const { userId, start, end } = req.query; 
-  
+  const { userId, start, end } = req.query;
   if (!userId) {
     return res.status(400).json({ message: 'userId query param is required' });
   }
-
   try {
     const filter = { user_id: userId };
-    
-    // אם נשלחו תאריכים, נסנן לפיהם
     if (start && end) {
       filter.event_date = {
-        $gte: new Date(start), 
-        $lte: new Date(end)    
+        $gte: new Date(start),
+        $lte: new Date(end)
       };
     }
-
     const events = await Event.find(filter).sort({ event_date: 1 });
     res.json(events.map(toPublic));
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: 'Error fetching events', error: err.message });
   }
 });
 
-// --- Get Single Event --- 
 app.get('/api/events/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const event = await Event.findById(id); 
-    
-    if (!event) {
-      return res.status(404).json({ message: 'Event not found' });
-    }
-    
-    res.json(toPublic(event));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error fetching event', error: err.message });
-  }
+  const { id } = req.params;
+  try {
+    const event = await Event.findById(id);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+    res.json(toPublic(event));
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching event', error: err.message });
+  }
 });
 
-// --- Update Event ---
 app.put('/api/events/:id', async (req, res) => {
-  const { id } = req.params;
-  const { title, eventDate, description } = req.body; 
+  const { id } = req.params;
+  const { title, eventDate, description } = req.body;
+  try {
+    const updateData = {};
+    if (title !== undefined) updateData.title = title;
+    if (eventDate !== undefined) updateData.event_date = new Date(eventDate);
+    if (description !== undefined) updateData.description = description;
 
-  try {
-    const updateData = {};
-    if (title !== undefined) updateData.title = title;
-    if (eventDate !== undefined) updateData.event_date = new Date(eventDate);
-    if (description !== undefined) updateData.description = description;
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No fields provided for update' });
+    }
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ message: 'No fields provided for update' });
-    }
+    const updated = await Event.findByIdAndUpdate(id, updateData, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Event not found' });
 
-    const updated = await Event.findByIdAndUpdate(id, updateData, { new: true });
-
-    if (!updated) {
-      return res.status(404).json({ message: 'Event not found' });
-    }
-
-    res.json(toPublic(updated));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error updating event', error: err.message });
-  }
+    // שידור לסנכרון חלונות (משתמשים ב-UserID של האירוע המעודכן)
+    io.to(String(updated.user_id)).emit('data_changed');
+    res.json(toPublic(updated));
+  } catch (err) {
+    res.status(500).json({ message: 'Error updating event', error: err.message });
+  }
 });
 
-// --- Delete Event ---
 app.delete('/api/events/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const deleted = await Event.findByIdAndDelete(id);
-    if (!deleted) {
-      return res.status(404).json({ message: 'Event not found' });
-    }
+    if (!deleted) return res.status(404).json({ message: 'Event not found' });
+    
+    // שידור לסנכרון חלונות
+    io.to(String(deleted.user_id)).emit('data_changed');
     res.json({ message: 'Event deleted successfully', id });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: 'Error deleting event', error: err.message });
   }
 });
 
+// --- Task Routes ---
 
-// --- Create Task ---
 app.post('/api/tasks', async (req, res) => {
-  const { userId, title, dueDate, isDone } = req.body;
-  if (!userId || !title) {
-    return res.status(400).json({ message: 'userId and title are required' });
-  }
-  try {
-    const task = await Task.create({
-      user_id: userId,
-      title,
-      due_date: dueDate ? new Date(dueDate) : null,
-      is_done: !!isDone,
-    });
-    res.status(201).json(toPublic(task));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error creating task', error: err.message });
-  }
+  const { userId, title, dueDate, isDone } = req.body;
+  if (!userId || !title) {
+    return res.status(400).json({ message: 'userId and title are required' });
+  }
+  try {
+    const task = await Task.create({
+      user_id: userId,
+      title,
+      due_date: dueDate ? new Date(dueDate) : null,
+      is_done: !!isDone,
+    });
+    // שידור לסנכרון חלונות
+    io.to(userId).emit('data_changed');
+    res.status(201).json(toPublic(task));
+  } catch (err) {
+    res.status(500).json({ message: 'Error creating task', error: err.message });
+  }
 });
 
-// --- Get Tasks for User ---
 app.get('/api/tasks', async (req, res) => {
-  const { userId } = req.query;
-  if (!userId) return res.status(400).json({ message: 'userId required' });
-  try {
-    const tasks = await Task.find({ user_id: userId }).sort({ due_date: 1 });
-    res.json(tasks.map(toPublic));
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching tasks', error: err.message });
-  }
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ message: 'userId required' });
+  try {
+    const tasks = await Task.find({ user_id: userId }).sort({ due_date: 1 });
+    res.json(tasks.map(toPublic));
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching tasks', error: err.message });
+  }
 });
 
-// ======================================================
-//                 GUEST ROUTES (החלק החשוב)
-// ======================================================
+// --- Guest Routes ---
 
-// --- Get Guests for an Event ---
 app.get('/api/events/:eventId/guests', async (req, res) => {
-  const { eventId } = req.params;
-  try {
-    const guests = await Guest.find({ event_id: eventId }).sort({ created_at: -1 });
-    res.json(guests.map(toPublic));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error fetching guests', error: err.message });
-  }
+  const { eventId } = req.params;
+  try {
+    const guests = await Guest.find({ event_id: eventId }).sort({ created_at: -1 });
+    res.json(guests.map(toPublic));
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching guests', error: err.message });
+  }
 });
 
-// --- Add Guest (POST) ---
 app.post('/api/guests', async (req, res) => {
-  const { 
-    eventId, fullName, email, phone, side, 
-    amountInvited, mealOption, dietaryNotes, 
-    rsvpStatus // מקבלים מהפרונט ב-camelCase
-  } = req.body;
-
-  try {
-    const newGuest = await Guest.create({
-      event_id: eventId,
-      full_name: fullName,
-      email,
-      phone,
-      side: side || 'friend',
-      amount_invited: amountInvited,
-      meal_option: mealOption || 'standard',
-      dietary_notes: dietaryNotes,
-      rsvp_status: rsvpStatus || 'pending' // המרה ל-snake_case של ה-DB
-    });
-    res.status(201).json(toPublic(newGuest));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error adding guest' });
-  }
+  const { eventId, fullName, email, phone, side, amountInvited, mealOption, dietaryNotes, rsvpStatus } = req.body;
+  try {
+    const newGuest = await Guest.create({
+      event_id: eventId,
+      full_name: fullName,
+      email,
+      phone,
+      side: side || 'friend',
+      amount_invited: amountInvited,
+      meal_option: mealOption || 'standard',
+      dietary_notes: dietaryNotes,
+      rsvp_status: rsvpStatus || 'pending'
+    });
+    res.status(201).json(toPublic(newGuest));
+  } catch (err) {
+    res.status(500).json({ message: 'Error adding guest' });
+  }
 });
 
-// --- Update Guest (PUT) ---
 app.put('/api/guests/:id', async (req, res) => {
-  const { id } = req.params;
-  
-  // כאן אנחנו מפרקים את ה-Body כדי למפות את השדות נכון
-  const { 
-    fullName, email, phone, side, 
-    amountInvited, mealOption, dietaryNotes, 
-    rsvpStatus // הנה הבעיה שהייתה לך! הפרונט שולח את זה
-  } = req.body;
+  const { id } = req.params;
+  const { fullName, email, phone, side, amountInvited, mealOption, dietaryNotes, rsvpStatus } = req.body;
+  try {
+    const updateData = {};
+    if (fullName !== undefined) updateData.full_name = fullName;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined) updateData.phone = phone;
+    if (side !== undefined) updateData.side = side;
+    if (amountInvited !== undefined) updateData.amount_invited = amountInvited;
+    if (mealOption !== undefined) updateData.meal_option = mealOption;
+    if (dietaryNotes !== undefined) updateData.dietary_notes = dietaryNotes;
+    if (rsvpStatus !== undefined) updateData.rsvp_status = rsvpStatus;
 
-  try {
-    const updateData = {};
-    
-    // מעדכנים רק מה שנשלח
-    if (fullName !== undefined) updateData.full_name = fullName;
-    if (email !== undefined) updateData.email = email;
-    if (phone !== undefined) updateData.phone = phone;
-    if (side !== undefined) updateData.side = side;
-    if (amountInvited !== undefined) updateData.amount_invited = amountInvited;
-    if (mealOption !== undefined) updateData.meal_option = mealOption;
-    if (dietaryNotes !== undefined) updateData.dietary_notes = dietaryNotes;
-    
-    // --- התיקון הקריטי: מיפוי rsvpStatus ל-rsvp_status ---
-    if (rsvpStatus !== undefined) updateData.rsvp_status = rsvpStatus;
-
-    const updated = await Guest.findByIdAndUpdate(id, updateData, { new: true });
-    
-    if (!updated) {
-      return res.status(404).json({ message: 'Guest not found' });
-    }
-
-    res.json(toPublic(updated));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error updating guest' });
-  }
+    const updated = await Guest.findByIdAndUpdate(id, updateData, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Guest not found' });
+    res.json(toPublic(updated));
+  } catch (err) {
+    res.status(500).json({ message: 'Error updating guest' });
+  }
 });
 
-// --- Delete Guest ---
 app.delete('/api/guests/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const deleted = await Guest.findByIdAndDelete(id);
-    if (!deleted) {
-      return res.status(404).json({ message: 'Guest not found' });
-    }
-    res.json({ message: 'Guest deleted successfully', id });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error deleting guest', error: err.message });
-  }
+  const { id } = req.params;
+  try {
+    const deleted = await Guest.findByIdAndDelete(id);
+    if (!deleted) return res.status(404).json({ message: 'Guest not found' });
+    res.json({ message: 'Guest deleted successfully', id });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting guest', error: err.message });
+  }
 });
 
-// ======================================================
-//                NOTIFICATIONS ROUTES
-// ======================================================
+// --- Notification Routes ---
 
-// --- Get Notifications (רק את אלו שלא נקראו) ---
 app.get('/api/notifications', async (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ message: 'userId required' });
-  
   try {
     const notifications = await Notification.find({ user_id: userId, is_read: false })
       .sort({ created_at: -1 });
     res.json(notifications.map(toPublic));
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: 'Error fetching notifications' });
   }
 });
 
-// --- Mark Notification as Read (עדכון ל"נקרא") ---
 app.put('/api/notifications/:id/read', async (req, res) => {
   try {
     await Notification.findByIdAndUpdate(req.params.id, { is_read: true });
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: 'Error updating notification' });
   }
 });
 
+// --- Server Start ---
 
-// הפעלה אחרי התחברות למונגו
 connectMongo()
-  .then(() => {
-    // במקום app.listen, משתמשים ב-server.listen
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`Backend (Socket.io/Mongo) listening on http://0.0.0.0:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('❌ Failed to connect Mongo:', err.message);
-    process.exit(1);
-  });
+  .then(() => {
+    // שימוש ב-server.listen במקום app.listen
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Backend (Socket.io/Mongo) listening on http://0.0.0.0:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('❌ Failed to connect Mongo:', err.message);
+    process.exit(1);
+  });

@@ -32,11 +32,18 @@ const Dashboard = ({ currentUser, onLogout }) => {
     const socket = io('http://localhost:4000');
     socket.emit('register_user', currentUser.id);
 
+    // 1. האזנה להתראות חדשות
     socket.on('new_notification', (newNotif) => {
       console.log('🔔 התקבלה התראה חדשה בזמן אמת!', newNotif);
       setNotifications((prev) => [newNotif, ...prev]);
       setMessage(`התראה חדשה: ${newNotif.message}`);
       setTimeout(() => setMessage(''), 4000);
+    });
+
+    // 2. האזנה לשינויי נתונים (סנכרון בין חלונות)
+    socket.on('data_changed', () => {
+      console.log('🔄 התקבל אות לרענון נתונים מחלון אחר');
+      fetchData(); // טוען מחדש את האירועים והמשימות
     });
 
     return () => {
@@ -46,7 +53,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
   const fetchData = async () => {
     try {
-      setLoading(true);
+      // כאן אנחנו לא מפעילים setLoading(true) כדי לא לגרום להבהוב במסך כשיש עדכון רקע
       const [eventsRes, tasksRes, notifRes] = await Promise.all([
         axios.get(`http://localhost:4000/api/events?userId=${currentUser.id}`),
         axios.get(`http://localhost:4000/api/tasks?userId=${currentUser.id}`),
@@ -56,7 +63,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
       setEvents(eventsRes.data);
       setTasks(tasksRes.data);
       setNotifications(notifRes.data);
-      setLoading(false);
+      setLoading(false); // רק בטעינה הראשונית זה רלוונטי
     } catch (err) {
       console.error(err);
       setLoading(false);
@@ -71,7 +78,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
     e.preventDefault();
     try {
       const res = await axios.post('http://localhost:4000/api/events', { userId: currentUser.id, ...eventForm });
-      setEvents([...events, res.data]);
+      setEvents([...events, res.data]); // עדכון מקומי מהיר
       setEventForm({ title: '', eventDate: '', description: '' });
       setMessage('האירוע נוצר בהצלחה! 🎉');
       setTimeout(() => setMessage(''), 3000);
@@ -82,7 +89,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
     e.preventDefault();
     try {
       const res = await axios.post('http://localhost:4000/api/tasks', { userId: currentUser.id, ...taskForm });
-      setTasks([...tasks, res.data]);
+      setTasks([...tasks, res.data]); // עדכון מקומי מהיר
       setTaskForm({ title: '', dueDate: '', isDone: false });
       setMessage('המשימה נוצרה בהצלחה! ✅');
       setTimeout(() => setMessage(''), 3000);
