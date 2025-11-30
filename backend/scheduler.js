@@ -4,7 +4,7 @@ const Notification = require('./models/Notification');
 const User = require('./models/User');
 
 module.exports = (io) => {
-  // רץ כל דקה (* * * * *) לבדיקה. בסוף תחזיר ל-0 0 * * *
+  // הרצת המשימה כל יום בחצות 
   cron.schedule('0 0 * * *', async () => {
     console.log('⏰ Scheduler running (Socket Mode)...');
     
