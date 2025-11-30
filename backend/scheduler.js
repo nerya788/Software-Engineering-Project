@@ -1,62 +1,65 @@
 const cron = require('node-cron');
 const Event = require('./models/Event');
 const Notification = require('./models/Notification');
-const User = require('./models/User'); // מייבאים את מודל המשתמש
+const User = require('./models/User');
 
-// רץ כל יום בחצות
-cron.schedule('0 0 * * *', async () => {
-  console.log('⏰ Scheduler running: Checking custom preferences...');
-  
-  try {
-    // 1. מביאים את כל המשתמשים
-    const users = await User.find({});
+module.exports = (io) => {
+  // רץ כל דקה (* * * * *) לבדיקה. בסוף תחזיר ל-0 0 * * *
+  cron.schedule('0 0 * * *', async () => {
+    console.log('⏰ Scheduler running (Socket Mode)...');
+    
+    try {
+      const users = await User.find({});
 
-    for (const user of users) {
-      // בודקים מה ההגדרה של המשתמש (ברירת מחדל: 1 יום)
-      const daysBefore = user.settings?.notification_days ?? 1;
-      
-      // אם המשתמש ביטל התראות (למשל קבע -1), מדלגים
-      if (daysBefore < 0) continue;
+      for (const user of users) {
+        const daysBefore = user.settings?.notification_days ?? 1;
+        if (daysBefore < 0) continue;
 
-      // 2. מחשבים את תאריך היעד עבור המשתמש הזה
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + daysBefore);
-      
-      const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
-      const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
-
-      // 3. מחפשים אירועים של המשתמש שנופלים ביום הזה
-      const events = await Event.find({
-        user_id: user._id,
-        event_date: {
-          $gte: startOfDay,
-          $lte: endOfDay
-        }
-      });
-
-      // 4. יוצרים התראות
-      for (const event of events) {
-        const message = `תזכורת: האירוע "${event.title}" מתקיים בעוד ${daysBefore} ימים!`;
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + daysBefore);
         
-        // מונעים כפילויות
-        const exists = await Notification.findOne({
+        const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
+        const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+
+        const events = await Event.find({
           user_id: user._id,
-          message: message
+          event_date: { $gte: startOfDay, $lte: endOfDay }
         });
 
-        if (!exists) {
-          await Notification.create({
+        for (const event of events) {
+          const message = `תזכורת: האירוע "${event.title}" מתקיים בעוד ${daysBefore} ימים!`;
+          
+          const exists = await Notification.findOne({
             user_id: user._id,
-            message: message,
-            type: 'reminder'
+            message: message
           });
-          console.log(`🔔 Notification created for ${user.email}: ${event.title}`);
+
+          if (!exists) {
+            const newNotification = await Notification.create({
+              user_id: user._id,
+              message: message,
+              type: 'reminder'
+            });
+            
+            console.log(`🔔 Created notification for ${user.email}`);
+            
+            // שליחה ב-Socket
+            if (io) {
+              io.to(user.id).emit('new_notification', {
+                id: newNotification._id,
+                message: newNotification.message,
+                created_at: newNotification.created_at,
+                is_read: false
+              });
+              console.log(`📡 Sent socket to user ${user.id}`);
+            } else {
+                console.log('⚠️ IO object is missing!');
+            }
+          }
         }
       }
+    } catch (err) {
+      console.error('❌ Scheduler error:', err);
     }
-  } catch (err) {
-    console.error('❌ Scheduler error:', err);
-  }
-});
-
-module.exports = cron;
+  });
+};

@@ -4,7 +4,8 @@
   "description": "This folder contains the Node.js + Express backend of the Wedding Planning Management System.\r All API routes (authentication, events, tasks, notifications) will be implemented here.\r Database access will be handled using Prisma and PostgreSQL.",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,10 @@
     "express": "^5.1.0",
     "lucide-react": "^0.555.0",
     "mongoose": "^9.0.0",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
   }
 }
