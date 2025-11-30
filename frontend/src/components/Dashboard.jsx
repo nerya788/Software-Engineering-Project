@@ -3,42 +3,45 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { Bell, Settings } from 'lucide-react'; // תיקון: ייבוא מרוכז ונקי
-import Countdown from './Countdown.jsx'; // וודא שהקובץ קיים בשם הזה
+import { Bell, Settings } from 'lucide-react';
+import io from 'socket.io-client';
+import Countdown from './Countdown.jsx';
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [date, setDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month'); // 'month' or 'week'
+  const [viewMode, setViewMode] = useState('month');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   
-  // טפסים
   const [eventForm, setEventForm] = useState({ title: '', eventDate: '', description: '' });
   const [taskForm, setTaskForm] = useState({ title: '', dueDate: '', isDone: false });
 
-  // משתנים להתראות
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // טעינה ראשונית
   useEffect(() => {
     if (currentUser?.id) fetchData();
   }, [currentUser]);
 
-  // מנגנון בדיקת התראות אוטומטי (Polling) כל 30 שניות
   useEffect(() => {
     if (!currentUser?.id) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await axios.get(`http://localhost:4000/api/notifications?userId=${currentUser.id}`);
-        setNotifications(res.data);
-      } catch (err) {
-        console.error('Background notification check failed', err);
-      }
-    }, 30000);
-    return () => clearInterval(interval);
+
+    // חיבור ל-Socket
+    const socket = io('http://localhost:4000');
+    socket.emit('register_user', currentUser.id);
+
+    socket.on('new_notification', (newNotif) => {
+      console.log('🔔 התקבלה התראה חדשה בזמן אמת!', newNotif);
+      setNotifications((prev) => [newNotif, ...prev]);
+      setMessage(`התראה חדשה: ${newNotif.message}`);
+      setTimeout(() => setMessage(''), 4000);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, [currentUser]);
 
   const fetchData = async () => {
@@ -60,7 +63,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
     }
   };
 
-  // חישוב האירוע הקרוב ביותר עבור ה-Countdown
   const nextEvent = events
     .filter(e => new Date(e.event_date) > new Date().setHours(0,0,0,0))
     .sort((a, b) => new Date(a.event_date) - new Date(b.event_date))[0];
@@ -121,7 +123,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
   return (
     <div className="min-h-screen bg-gray-50 pb-20 font-sans" dir="rtl">
       
-      {/* Header */}
       <header className="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -132,7 +133,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
           </div>
 
           <div className="flex items-center gap-4">
-             {/* --- כפתור התראות (פעמון) --- */}
              <div className="relative">
                 <button 
                   onClick={() => setShowNotifications(!showNotifications)}
@@ -144,7 +144,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
                   )}
                 </button>
 
-                {/* חלונית ההתראות */}
                 {showNotifications && (
                   <div className="absolute left-0 mt-3 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50">
                     <div className="p-3 border-b bg-gray-50 font-bold text-gray-700 flex justify-between items-center">
@@ -177,7 +176,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
              <span className="text-gray-600 font-medium hidden md:inline">היי, {currentUser.full_name}</span>
              
-             {/* כפתור הגדרות */}
              <Link to="/settings" className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition" title="הגדרות">
                <Settings size={20} />
              </Link>
@@ -191,13 +189,10 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         
-        {/* שימוש בקומפוננטת הספירה לאחור החדשה */}
         {nextEvent && <Countdown targetDate={nextEvent.event_date} title={nextEvent.title} />}
 
-        {/* --- אזור ראשי: לוח שנה ומשימות --- */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
           
-          {/* לוח שנה (צד ימין) */}
           <div className="lg:col-span-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 h-fit">
             
             <div className="flex justify-between items-center mb-6">
@@ -260,7 +255,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
             </div>
           </div>
 
-          {/* משימות ליום הנבחר (צד שמאל) */}
           <div className="lg:col-span-8 bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col min-h-[500px]">
             <div className="flex justify-between items-end mb-6 border-b border-gray-100 pb-4">
               <div>
@@ -320,7 +314,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
           </div>
         </div>
 
-        {/* --- 3. האירועים שלי --- */}
         <section className="mb-12">
           <div className="flex items-center gap-4 mb-6">
             <h2 className="text-2xl font-bold text-gray-800">האירועים שלי</h2>
@@ -360,10 +353,8 @@ const Dashboard = ({ currentUser, onLogout }) => {
           )}
         </section>
 
-        {/* --- 4. טפסים להוספה --- */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* טופס הוספת משימה */}
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
             <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-purple-100 p-2 rounded-lg text-purple-600 text-sm">✚</span> 
@@ -386,7 +377,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
             </form>
           </div>
 
-          {/* טופס הוספת אירוע */}
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
             <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-pink-100 p-2 rounded-lg text-pink-600 text-sm">✚</span> 
@@ -417,7 +407,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
           </div>
         </div>
 
-        {/* הודעות קופצות */}
         {message && (
           <div className="fixed bottom-8 left-8 bg-gray-900/90 backdrop-blur text-white px-6 py-4 rounded-2xl shadow-2xl animate-fade-in-up flex items-center gap-3 z-50">
             <span className="text-xl">✨</span> {message}
