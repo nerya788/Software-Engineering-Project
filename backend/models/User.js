@@ -7,6 +7,10 @@ const userSchema = new mongoose.Schema(
     password_hash: { type: String, required: true },
     full_name: { type: String },
     
+    // שחזור סיסמה בסיסי
+    reset_token: { type: String },
+    reset_token_expires_at: { type: Date },
+
     // --- שדה חדש להגדרות ---
     settings: {
       notification_days: { type: Number, default: 1 } // ברירת מחדל: יום אחד לפני
