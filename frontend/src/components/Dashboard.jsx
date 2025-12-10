@@ -8,22 +8,79 @@ import io from 'socket.io-client';
 import Countdown from './Countdown.jsx';
 
 const Dashboard = ({ currentUser, onLogout }) => {
+  const categories = ['general', 'vendors', 'budget', 'design', 'guests', 'logistics'];
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [date, setDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('month');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   
   const [eventForm, setEventForm] = useState({ title: '', eventDate: '', description: '' });
-  const [taskForm, setTaskForm] = useState({ title: '', dueDate: '', isDone: false });
+  const [taskForm, setTaskForm] = useState({ title: '', dueDate: '', isDone: false, category: 'general', assigneeName: '', assigneeEmail: '' });
 
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // בדיקה שהמשתמש קיים
   useEffect(() => {
-    if (currentUser?.id) fetchData();
+    if (!currentUser) {
+      console.warn('⚠️ אין currentUser ב-Dashboard');
+      return;
+    }
+    if (!currentUser.id) {
+      console.warn('⚠️ אין currentUser.id ב-Dashboard:', currentUser);
+    } else {
+      console.log('✅ currentUser קיים:', currentUser.id, currentUser.email);
+    }
   }, [currentUser]);
+
+  const fetchData = async () => {
+    if (!currentUser?.id) {
+      console.warn('⚠️ אין currentUser.id - לא ניתן לטעון נתונים');
+      return;
+    }
+    
+    try {
+      console.log('📥 טוען נתונים עבור משתמש:', currentUser.id);
+      const [eventsRes, tasksRes, notifRes] = await Promise.all([
+        axios.get(`http://localhost:4000/api/events?userId=${currentUser.id}`),
+        axios.get(`http://localhost:4000/api/tasks?userId=${currentUser.id}`),
+        axios.get(`http://localhost:4000/api/notifications?userId=${currentUser.id}`)
+      ]);
+      
+      console.log('✅ נתונים נטענו:', {
+        events: eventsRes.data.length,
+        tasks: tasksRes.data.length,
+        notifications: notifRes.data.length
+      });
+      
+      setEvents(eventsRes.data || []);
+      setTasks(tasksRes.data || []);
+      setNotifications(notifRes.data || []);
+      setLoading(false);
+    } catch (err) {
+      console.error('❌ שגיאה בטעינת נתונים:', err);
+      console.error('❌ פרטי השגיאה:', err.response?.data || err.message);
+      setLoading(false);
+      setMessage('שגיאה בטעינת הנתונים. נסה לרענן את הדף.');
+      setTimeout(() => setMessage(''), 5000);
+    }
+  };
+
+  // טעינת נתונים מיד כשהמשתמש מתחבר
+  useEffect(() => {
+    if (currentUser?.id) {
+      console.log('🔄 טוען נתונים עבור משתמש:', currentUser.id);
+      setLoading(true);
+      fetchData();
+    } else {
+      console.warn('⚠️ לא ניתן לטעון נתונים - אין currentUser.id');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -31,6 +88,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
     // חיבור ל-Socket
     const socket = io('http://localhost:4000');
     socket.emit('register_user', currentUser.id);
+    console.log('🔌 התחבר ל-Socket.io עבור משתמש:', currentUser.id);
 
     // 1. האזנה להתראות חדשות
     socket.on('new_notification', (newNotif) => {
@@ -42,58 +100,81 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
     // 2. האזנה לשינויי נתונים (סנכרון בין חלונות)
     socket.on('data_changed', () => {
-      console.log('🔄 התקבל אות לרענון נתונים מחלון אחר');
-      fetchData(); // טוען מחדש את האירועים והמשימות
+      console.log('🔄 התקבל אות לרענון נתונים - מעדכן מיד');
+      fetchData(); // טוען מחדש את האירועים והמשימות מיד
     });
 
+    // 3. רענון אוטומטי כל 30 שניות (גיבוי למקרה ש-Socket לא עובד)
+    const refreshInterval = setInterval(() => {
+      console.log('🔄 רענון אוטומטי של נתונים');
+      fetchData();
+    }, 30000);
+
     return () => {
+      clearInterval(refreshInterval);
       socket.disconnect();
     };
-  }, [currentUser]);
 
-  const fetchData = async () => {
-    try {
-      // כאן אנחנו לא מפעילים setLoading(true) כדי לא לגרום להבהוב במסך כשיש עדכון רקע
-      const [eventsRes, tasksRes, notifRes] = await Promise.all([
-        axios.get(`http://localhost:4000/api/events?userId=${currentUser.id}`),
-        axios.get(`http://localhost:4000/api/tasks?userId=${currentUser.id}`),
-        axios.get(`http://localhost:4000/api/notifications?userId=${currentUser.id}`)
-      ]);
-      
-      setEvents(eventsRes.data);
-      setTasks(tasksRes.data);
-      setNotifications(notifRes.data);
-      setLoading(false); // רק בטעינה הראשונית זה רלוונטי
-    } catch (err) {
-      console.error(err);
-      setLoading(false);
-    }
-  };
+  }, [currentUser?.id]);
 
-  const nextEvent = events
-    .filter(e => new Date(e.event_date) > new Date().setHours(0,0,0,0))
-    .sort((a, b) => new Date(a.event_date) - new Date(b.event_date))[0];
+  // מיון משימות ואירועים לפי תאריך (חייב להיות לפני השימוש ב-nextEvent)
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (!a.due_date && !b.due_date) return 0;
+    if (!a.due_date) return 1;
+    if (!b.due_date) return -1;
+    return new Date(a.due_date) - new Date(b.due_date);
+  });
+
+  const sortedEvents = [...events].sort((a, b) => {
+    return new Date(a.event_date) - new Date(b.event_date);
+  });
+
+  const nextEvent = sortedEvents
+    .filter(e => new Date(e.event_date) > new Date().setHours(0,0,0,0))[0];
 
   const handleCreateEvent = async (e) => {
     e.preventDefault();
     try {
       const res = await axios.post('http://localhost:4000/api/events', { userId: currentUser.id, ...eventForm });
-      setEvents([...events, res.data]); // עדכון מקומי מהיר
+      // עדכון מיידי - טוען מחדש את כל הנתונים
+      await fetchData();
       setEventForm({ title: '', eventDate: '', description: '' });
       setMessage('האירוע נוצר בהצלחה! 🎉');
       setTimeout(() => setMessage(''), 3000);
-    } catch (err) { setMessage('שגיאה ביצירת אירוע'); }
+    } catch (err) { 
+      console.error('Error creating event:', err);
+      setMessage('שגיאה ביצירת אירוע'); 
+    }
   };
 
   const handleCreateTask = async (e) => {
     e.preventDefault();
     try {
       const res = await axios.post('http://localhost:4000/api/tasks', { userId: currentUser.id, ...taskForm });
-      setTasks([...tasks, res.data]); // עדכון מקומי מהיר
-      setTaskForm({ title: '', dueDate: '', isDone: false });
+      // עדכון מיידי - טוען מחדש את כל הנתונים
+      await fetchData();
+      setTaskForm({ title: '', dueDate: '', isDone: false, category: 'general', assigneeName: '', assigneeEmail: '' });
       setMessage('המשימה נוצרה בהצלחה! ✅');
       setTimeout(() => setMessage(''), 3000);
-    } catch (err) { setMessage('שגיאה ביצירת משימה'); }
+    } catch (err) { 
+      console.error('Error creating task:', err);
+      setMessage('שגיאה ביצירת משימה'); 
+    }
+  };
+
+  const updateTask = async (taskId, updates) => {
+    try {
+      const res = await axios.put(`http://localhost:4000/api/tasks/${taskId}`, updates);
+      // עדכון מיידי - טוען מחדש את כל הנתונים
+      await fetchData();
+    } catch (err) {
+      console.error('Error updating task', err);
+      setMessage('שגיאה בעדכון משימה');
+    }
+  };
+
+  const toggleTaskDone = (task) => {
+    updateTask(task.id, { isDone: !task.is_done, status: !task.is_done ? 'done' : 'todo' });
   };
 
   const markAsRead = async (id) => {
@@ -105,19 +186,25 @@ const Dashboard = ({ currentUser, onLogout }) => {
     }
   };
 
-  const tasksForSelectedDate = tasks.filter(task => {
+  const visibleTasks = sortedTasks.filter(task => {
+    const statusOk = statusFilter === 'all' || task.status === statusFilter || (statusFilter === 'done' && task.is_done);
+    const catOk = categoryFilter === 'all' || task.category === categoryFilter;
+    return statusOk && catOk;
+  });
+
+  const tasksForSelectedDate = visibleTasks.filter(task => {
     if (!task.due_date) return false;
     return new Date(task.due_date).toDateString() === date.toDateString();
   });
 
-  const eventsForSelectedDate = events.filter(e => 
+  const eventsForSelectedDate = sortedEvents.filter(e => 
     new Date(e.event_date).toDateString() === date.toDateString()
   );
 
   const tileContent = ({ date, view }) => {
     if (view === 'month') {
-      const hasTask = tasks.some(t => t.due_date && new Date(t.due_date).toDateString() === date.toDateString());
-      const hasEvent = events.some(e => new Date(e.event_date).toDateString() === date.toDateString());
+      const hasTask = sortedTasks.some(t => t.due_date && new Date(t.due_date).toDateString() === date.toDateString());
+      const hasEvent = sortedEvents.some(e => new Date(e.event_date).toDateString() === date.toDateString());
       return (
         <div className="flex justify-center gap-1 mt-1">
           {hasTask && <div className="h-1.5 w-1.5 bg-purple-500 rounded-full" title="יש משימה"></div>}
@@ -231,8 +318,8 @@ const Dashboard = ({ currentUser, onLogout }) => {
                     const weekDate = new Date(curr.setDate(firstDay + i));
                     const isSelected = weekDate.toDateString() === date.toDateString();
 
-                    const hasEv = events.some(e => new Date(e.event_date).toDateString() === weekDate.toDateString());
-                    const hasTask = tasks.some(t => t.due_date && new Date(t.due_date).toDateString() === weekDate.toDateString());
+                    const hasEv = sortedEvents.some(e => new Date(e.event_date).toDateString() === weekDate.toDateString());
+                    const hasTask = sortedTasks.some(t => t.due_date && new Date(t.due_date).toDateString() === weekDate.toDateString());
 
                     return (
                       <div 
@@ -263,25 +350,41 @@ const Dashboard = ({ currentUser, onLogout }) => {
           </div>
 
           <div className="lg:col-span-8 bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col min-h-[500px]">
-            <div className="flex justify-between items-end mb-6 border-b border-gray-100 pb-4">
-              <div>
-                <p className="text-gray-500 text-sm mb-1">משימות ואירועים עבור</p>
-                <h2 className="text-2xl font-bold text-gray-800">
-                   {date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </h2>
+            <div className="flex flex-col gap-4 mb-6 border-b border-gray-100 pb-4">
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-gray-500 text-sm mb-1">משימות ואירועים עבור</p>
+                  <h2 className="text-2xl font-bold text-gray-800">
+                    {date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </h2>
+                </div>
+                <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${visibleTasks.length > 0 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {visibleTasks.length} משימות
+                </span>
               </div>
-              <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${tasksForSelectedDate.length > 0 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}>
-                {tasksForSelectedDate.length} משימות
-              </span>
+              <div className="flex flex-wrap gap-3">
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white">
+                  <option value="all">כל הסטטוסים</option>
+                  <option value="todo">פתוחות</option>
+                  <option value="in_progress">בתהליך</option>
+                  <option value="done">הושלמו</option>
+                </select>
+                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white">
+                  <option value="all">כל הקטגוריות</option>
+                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-              {eventsForSelectedDate.map(ev => (
+              {/* הצגת כל האירועים - לא רק של התאריך הנבחר */}
+              {sortedEvents.length > 0 && sortedEvents.map(ev => (
                 <div key={ev.id} className="p-4 bg-gradient-to-r from-pink-50 to-white border-r-4 border-pink-500 rounded-xl shadow-sm mb-3">
                   <div className="flex justify-between items-start">
                     <div>
                         <h3 className="font-bold text-gray-800">{ev.title}</h3>
                         <p className="text-sm text-gray-500">{ev.description || 'אין תיאור'}</p>
+                        <p className="text-xs text-gray-400 mt-1">📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}</p>
                     </div>
                     <Link to={`/events/${ev.id}/edit`} className="text-xs bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">
                         ערוך
@@ -290,28 +393,38 @@ const Dashboard = ({ currentUser, onLogout }) => {
                 </div>
               ))}
               
-              {tasksForSelectedDate.length === 0 ? (
-                eventsForSelectedDate.length === 0 && (
+              {/* הצגת כל המשימות המסוננות - לא רק של התאריך הנבחר */}
+              {visibleTasks.length === 0 ? (
+                sortedEvents.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400">
                     <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-3 text-2xl">☕</div>
-                    <p className="text-lg font-medium">אין משימות ליום זה</p>
-                    <p className="text-sm opacity-70">יום חופש! או שתוסיף משימה למטה?</p>
+                    <p className="text-lg font-medium">אין משימות או אירועים</p>
+                    <p className="text-sm opacity-70">יום חופש! או שתוסיף משימה/אירוע למטה?</p>
                   </div>
                 )
               ) : (
-                tasksForSelectedDate.map(task => (
+                visibleTasks.map(task => (
                   <div key={task.id} className="group flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-2xl hover:bg-white hover:shadow-md hover:border-purple-100 transition duration-200">
                     <div className="flex items-center gap-4">
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${task.is_done ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}>
+                      <button
+                        onClick={() => toggleTaskDone(task)}
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${task.is_done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-purple-400'}`}
+                        title="סמן כהושלם"
+                      >
                         {task.is_done && <span className="text-white text-xs">✓</span>}
-                      </div>
+                      </button>
                       <div>
                         <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                           {task.title}
                         </h3>
-                        <span className={`text-xs px-2 py-0.5 rounded-md inline-block mt-1 ${task.is_done ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                          {task.is_done ? 'הושלם' : 'בתהליך'}
-                        </span>
+                        <div className="flex flex-wrap gap-2 mt-1 text-xs">
+                          <span className={`px-2 py-0.5 rounded-md ${task.is_done ? 'bg-green-100 text-green-700' : task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                            {task.is_done ? 'הושלם' : task.status === 'in_progress' ? 'בתהליך' : 'פתוחה'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">קטגוריה: {task.category || 'כללי'}</span>
+                          {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">אחראי: {task.assignee_name}</span>}
+                          {task.due_date && <span className="px-2 py-0.5 rounded-md bg-pink-50 text-pink-700">דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}</span>}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -321,19 +434,124 @@ const Dashboard = ({ currentUser, onLogout }) => {
           </div>
         </div>
 
+        {/* משימות באיחור */}
+        {(() => {
+          const overdueTasks = sortedTasks.filter(task => 
+            task.due_date && 
+            new Date(task.due_date) < new Date() && 
+            !task.is_done
+          );
+          return overdueTasks.length > 0 && (
+            <section className="mb-12">
+              <div className="flex items-center gap-4 mb-6">
+                <h2 className="text-2xl font-bold text-red-600 flex items-center gap-2">
+                  ⚠️ משימות באיחור ({overdueTasks.length})
+                </h2>
+                <div className="h-px flex-1 bg-gray-200"></div>
+              </div>
+              <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
+                <div className="space-y-3">
+                  {overdueTasks.map(task => (
+                    <div key={task.id} className="bg-white p-4 rounded-xl border border-red-200 flex items-center justify-between">
+                      <div className="flex items-center gap-4 flex-1">
+                        <button
+                          onClick={() => toggleTaskDone(task)}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${task.is_done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-red-400'}`}
+                          title="סמן כהושלם"
+                        >
+                          {task.is_done && <span className="text-white text-xs">✓</span>}
+                        </button>
+                        <div className="flex-1">
+                          <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                            {task.title}
+                          </h3>
+                          <div className="flex flex-wrap gap-2 mt-1 text-xs">
+                            <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-700 font-bold">באיחור</span>
+                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">קטגוריה: {task.category || 'כללי'}</span>
+                            {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">אחראי: {task.assignee_name}</span>}
+                            {task.due_date && <span className="px-2 py-0.5 rounded-md bg-red-50 text-red-700">דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* כל המשימות (חוץ מהושלמו) */}
+        <section className="mb-12">
+          <div className="flex items-center gap-4 mb-6">
+            <h2 className="text-2xl font-bold text-gray-800">כל המשימות</h2>
+            <div className="h-px flex-1 bg-gray-200"></div>
+          </div>
+          
+          {loading ? (
+            <div className="text-center py-10">טוען נתונים...</div>
+          ) : (() => {
+            const activeTasks = sortedTasks.filter(task => !task.is_done);
+            return activeTasks.length === 0 ? (
+              <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-gray-300">
+                <p className="text-gray-500">אין משימות פעילות. כל המשימות הושלמו! 🎉</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                <div className="space-y-3">
+                  {activeTasks.map(task => (
+                    <div key={task.id} className="p-4 bg-gray-50 border border-gray-100 rounded-xl hover:bg-white hover:shadow-md transition flex items-center justify-between">
+                      <div className="flex items-center gap-4 flex-1">
+                        <button
+                          onClick={() => toggleTaskDone(task)}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${task.is_done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-purple-400'}`}
+                          title="סמן כהושלם"
+                        >
+                          {task.is_done && <span className="text-white text-xs">✓</span>}
+                        </button>
+                        <div className="flex-1">
+                          <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                            {task.title}
+                          </h3>
+                          <div className="flex flex-wrap gap-2 mt-1 text-xs">
+                            <span className={`px-2 py-0.5 rounded-md ${task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                              {task.status === 'in_progress' ? 'בתהליך' : 'פתוחה'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">קטגוריה: {task.category || 'כללי'}</span>
+                            {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">אחראי: {task.assignee_name}</span>}
+                            {task.due_date && (
+                              <span className={`px-2 py-0.5 rounded-md ${
+                                new Date(task.due_date) < new Date() 
+                                  ? 'bg-red-50 text-red-700 font-bold' 
+                                  : 'bg-pink-50 text-pink-700'
+                              }`}>
+                                דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </section>
+
         <section className="mb-12">
           <div className="flex items-center gap-4 mb-6">
             <h2 className="text-2xl font-bold text-gray-800">האירועים שלי</h2>
             <div className="h-px flex-1 bg-gray-200"></div>
           </div>
           
-          {loading ? <div className="text-center py-10">טוען נתונים...</div> : events.length === 0 ? (
+          {loading ? <div className="text-center py-10">טוען נתונים...</div> : sortedEvents.length === 0 ? (
             <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-gray-300">
               <p className="text-gray-500">עדיין אין אירועים. צור את האירוע הראשון שלך למטה!</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {events.map(ev => (
+              {sortedEvents.map(ev => (
                 <div key={ev.id} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition duration-300 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500"></div>
                   <h3 className="text-xl font-bold text-gray-800 mb-2">{ev.title}</h3>
@@ -377,6 +595,36 @@ const Dashboard = ({ currentUser, onLogout }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">תאריך יעד</label>
                 <input type="date" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition" 
                   value={taskForm.dueDate} onChange={e => setTaskForm({...taskForm, dueDate: e.target.value})} required />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">קטגוריה</label>
+                  <select className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition"
+                    value={taskForm.category} onChange={e => setTaskForm({...taskForm, category: e.target.value})}>
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">סטטוס</label>
+                  <select className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition"
+                    value={taskForm.status || 'todo'} onChange={e => setTaskForm({...taskForm, status: e.target.value})}>
+                    <option value="todo">פתוחה</option>
+                    <option value="in_progress">בתהליך</option>
+                    <option value="done">הושלמה</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">אחראי (שם)</label>
+                  <input type="text" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition"
+                    value={taskForm.assigneeName} onChange={e => setTaskForm({...taskForm, assigneeName: e.target.value})} placeholder="שם האחראי" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">אחראי (אימייל)</label>
+                  <input type="email" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition"
+                    value={taskForm.assigneeEmail} onChange={e => setTaskForm({...taskForm, assigneeEmail: e.target.value})} placeholder="email@example.com" />
+                </div>
               </div>
               <button className="w-full bg-purple-600 text-white font-bold py-3.5 rounded-xl hover:bg-purple-700 transition shadow-lg shadow-purple-200 mt-2">
                 הוסף משימה לרשימה
