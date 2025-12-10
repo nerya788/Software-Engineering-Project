@@ -6,7 +6,7 @@
 trigger:
   branches:
     include:
-      - main   # כל push ל-main יפעיל את ה-pipeline
+      - main
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -19,8 +19,17 @@ steps:
       versionSpec: '24.x'
     displayName: 'Setup Node.js'
 
+  # Install + Build frontend
   - script: |
+      cd frontend
       npm install
       npm run build
-    displayName: 'Install dependencies and build'
+    displayName: 'Build frontend'
+
+  # Install + Build backend
+  - script: |
+      cd backend
+      npm install
+      npm run build
+    displayName: 'Build backend'
 
