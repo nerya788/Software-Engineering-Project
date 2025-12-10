@@ -3,6 +3,8 @@ const { Server } = require('socket.io');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const mongoose = require('mongoose');
 
 const { connectMongo } = require('./db');
@@ -43,6 +45,49 @@ function toPublic(doc) {
   delete o.__v;
   return o;
 }
+
+function buildMailTransport() {
+  // נסה להשתמש ב-Gmail אם יש פרטי התחברות
+  if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_PASS,
+      },
+    });
+  }
+  
+  // אם אין פרטי Gmail, נסה להשתמש ב-SMTP כללי
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
+  
+  // fallback transport - מדפיס את הקישור לקונסול במקום לשלוח מייל
+  console.warn('⚠️ אין הגדרות מייל - הקישור לאיפוס סיסמה יודפס לקונסול');
+  return {
+    sendMail: async (opts) => {
+      console.log('📧 ============================================');
+      console.log('📧 שליחת מייל (מצב פיתוח - אין הגדרות מייל)');
+      console.log('📧 אל:', opts.to);
+      console.log('📧 נושא:', opts.subject);
+      console.log('📧 קישור לאיפוס:', opts.text || opts.html);
+      console.log('📧 ============================================');
+      // מחזיר אובייקט דמה של הצלחה
+      return { messageId: 'dev-mode-' + Date.now() };
+    },
+  };
+}
+
+const mailer = buildMailTransport();
 
 // Socket.io - טיפול בחיבורים
 io.on('connection', (socket) => {
@@ -110,6 +155,104 @@ app.post('/api/users/register', async (req, res) => {
   }
 });
 
+// בקשת איפוס סיסמה - יוצר סיסמה חדשה ושולח במייל
+app.post('/api/users/forgot', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'email is required' });
+    const user = await User.findOne({ email: String(email).toLowerCase().trim() });
+    if (!user) return res.status(200).json({ ok: true }); // לא חושפים קיום
+    
+    // יצירת סיסמה חדשה אקראית (8 תווים - אותיות ומספרים)
+    const generatePassword = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let password = '';
+      for (let i = 0; i < 8; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return password;
+    };
+    
+    const newPassword = generatePassword();
+    
+    // עדכון הסיסמה במסד הנתונים
+    user.password_hash = newPassword;
+    user.reset_token = undefined;
+    user.reset_token_expires_at = undefined;
+    await user.save();
+    
+    // הדפסת הסיסמה החדשה לקונסול (למצב פיתוח)
+    console.log('\n📧 ============================================');
+    console.log('📧 סיסמה חדשה נוצרה');
+    console.log('📧 ============================================');
+    console.log('📧 משתמש:', user.email);
+    console.log('📧 סיסמה חדשה:', newPassword);
+    console.log('📧 ============================================\n');
+    
+    try {
+      const mailOptions = {
+        from: process.env.GMAIL_USER || process.env.SMTP_USER || 'noreply@weddingplanner.com',
+        to: user.email,
+        subject: 'סיסמה חדשה - Wedding Planner',
+        text: `הסיסמה החדשה שלך היא: ${newPassword}\n\nאנא התחבר עם הסיסמה החדשה ואז שנה אותה בהגדרות.`,
+        html: `
+          <div dir="rtl" style="font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5;">
+            <div style="background-color: white; padding: 30px; border-radius: 10px; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #9333ea; text-align: center;">סיסמה חדשה</h2>
+              <p style="color: #333; font-size: 16px;">שלום,</p>
+              <p style="color: #333; font-size: 16px;">קיבלנו בקשה לאיפוס הסיסמה שלך. הסיסמה החדשה שלך היא:</p>
+              <div style="text-align: center; margin: 30px 0; padding: 20px; background-color: #f9f9f9; border: 2px solid #9333ea; border-radius: 10px;">
+                <p style="color: #9333ea; font-size: 24px; font-weight: bold; letter-spacing: 3px; margin: 0;">${newPassword}</p>
+              </div>
+              <p style="color: #333; font-size: 16px; margin-top: 20px;">אנא התחבר עם הסיסמה החדשה ואז שנה אותה בהגדרות לנוחיותך.</p>
+              <p style="color: #999; font-size: 12px; margin-top: 30px;">אם לא ביקשת איפוס סיסמה, אנא צור איתנו קשר מיד.</p>
+              <p style="color: #999; font-size: 12px;">לבטחונך, מומלץ לשנות את הסיסמה לאחר ההתחברות.</p>
+            </div>
+          </div>
+        `,
+      };
+      
+      const result = await mailer.sendMail(mailOptions);
+      console.log('✅ Email sent successfully to:', user.email);
+      if (result && result.messageId) {
+        console.log('📧 Message ID:', result.messageId);
+      }
+    } catch (emailErr) {
+      console.error('❌ Error sending email:', emailErr);
+      console.error('❌ Error details:', emailErr.message);
+      // אם אין הגדרות מייל, זה מצב פיתוח - הסיסמה כבר הודפסה למעלה
+      if (!process.env.GMAIL_USER && !process.env.SMTP_USER) {
+        console.log('ℹ️ מצב פיתוח - אין הגדרות מייל, הסיסמה מודפסת למעלה');
+      }
+      // עדיין מחזירים הצלחה כדי לא לחשוף מידע
+    }
+    
+    return res.json({ ok: true, password: (!process.env.GMAIL_USER && !process.env.SMTP_USER) ? newPassword : undefined });
+  } catch (err) {
+    console.error('Error in forgot password:', err);
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// החלפת סיסמה עם טוקן
+app.post('/api/users/reset', async (req, res) => {
+  const { email, token, newPassword } = req.body;
+  if (!email || !token || !newPassword) {
+    return res.status(400).json({ message: 'email, token, newPassword required' });
+  }
+  const user = await User.findOne({
+    email: String(email).toLowerCase().trim(),
+    reset_token: token,
+    reset_token_expires_at: { $gte: new Date() },
+  });
+  if (!user) return res.status(400).json({ message: 'Invalid or expired token' });
+  user.password_hash = newPassword;
+  user.reset_token = undefined;
+  user.reset_token_expires_at = undefined;
+  await user.save();
+  return res.json({ ok: true });
+});
+
 app.post('/api/users/login', async (req, res) => {
   let { email, password } = req.body;
   if (!email || !password) {
@@ -141,6 +284,32 @@ app.put('/api/users/:id/settings', async (req, res) => {
     res.json(toPublic(user));
   } catch (err) {
     res.status(500).json({ message: 'Error updating settings' });
+  }
+});
+
+// החלפת סיסמה מההגדרות (דורש סיסמה נוכחית)
+app.put('/api/users/:id/password', async (req, res) => {
+  const { id } = req.params;
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'currentPassword and newPassword are required' });
+  }
+  try {
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    // בדיקת סיסמה נוכחית
+    if (user.password_hash !== currentPassword) {
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+    
+    // עדכון סיסמה חדשה
+    user.password_hash = newPassword;
+    await user.save();
+    
+    res.json({ ok: true, message: 'Password changed successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error changing password', error: err.message });
   }
 });
 
@@ -237,18 +406,33 @@ app.delete('/api/events/:id', async (req, res) => {
 
 // --- Task Routes ---
 
+function syncStatus(taskDoc, payload = {}) {
+  const update = { ...payload };
+  if (update.is_done === true) update.status = 'done';
+  if (update.status === 'done') update.is_done = true;
+  if (update.status && update.status !== 'done') update.is_done = false;
+  return update;
+}
+
 app.post('/api/tasks', async (req, res) => {
-  const { userId, title, dueDate, isDone } = req.body;
+  const { userId, title, dueDate, isDone, status, category, assigneeName, assigneeEmail, collaboratorsEmails } = req.body;
   if (!userId || !title) {
     return res.status(400).json({ message: 'userId and title are required' });
   }
   try {
-    const task = await Task.create({
-      user_id: userId,
-      title,
-      due_date: dueDate ? new Date(dueDate) : null,
-      is_done: !!isDone,
-    });
+    const task = await Task.create(
+      syncStatus(null, {
+        user_id: userId,
+        title,
+        due_date: dueDate ? new Date(dueDate) : null,
+        is_done: !!isDone,
+        status: status || (isDone ? 'done' : 'todo'),
+        category: category || 'general',
+        assignee_name: assigneeName || null,
+        assignee_email: assigneeEmail || null,
+        collaborators_emails: collaboratorsEmails || [],
+      })
+    );
     // שידור לסנכרון חלונות
     io.to(userId).emit('data_changed');
     res.status(201).json(toPublic(task));
@@ -258,13 +442,51 @@ app.post('/api/tasks', async (req, res) => {
 });
 
 app.get('/api/tasks', async (req, res) => {
-  const { userId } = req.query;
+  const { userId, status, category, excludeDone, overdueOnly } = req.query;
   if (!userId) return res.status(400).json({ message: 'userId required' });
   try {
-    const tasks = await Task.find({ user_id: userId }).sort({ due_date: 1 });
+    const filter = { user_id: userId };
+    if (status) filter.status = status;
+    if (category) filter.category = category;
+    if (excludeDone === 'true') {
+      filter.is_done = false;
+      filter.status = { $ne: 'done' };
+    }
+    if (overdueOnly === 'true') {
+      filter.due_date = { $lt: new Date() };
+      filter.is_done = false;
+      filter.status = { $ne: 'done' };
+    }
+    const tasks = await Task.find(filter).sort({ due_date: 1, created_at: -1 });
     res.json(tasks.map(toPublic));
   } catch (err) {
     res.status(500).json({ message: 'Error fetching tasks', error: err.message });
+  }
+});
+
+// עדכון משימה (כולל סימון הושלמה, שיוך, קטגוריה)
+app.put('/api/tasks/:id', async (req, res) => {
+  const { id } = req.params;
+  const { title, dueDate, isDone, status, category, assigneeName, assigneeEmail, collaboratorsEmails } = req.body;
+  const update = {};
+  if (title !== undefined) update.title = title;
+  if (dueDate !== undefined) update.due_date = dueDate ? new Date(dueDate) : null;
+  if (isDone !== undefined) update.is_done = !!isDone;
+  if (status !== undefined) update.status = status;
+  if (category !== undefined) update.category = category;
+  if (assigneeName !== undefined) update.assignee_name = assigneeName;
+  if (assigneeEmail !== undefined) update.assignee_email = assigneeEmail;
+  if (collaboratorsEmails !== undefined) update.collaborators_emails = collaboratorsEmails;
+
+  const finalUpdate = syncStatus(null, update);
+
+  try {
+    const updated = await Task.findByIdAndUpdate(id, finalUpdate, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Task not found' });
+    io.to(String(updated.user_id)).emit('data_changed');
+    res.json(toPublic(updated));
+  } catch (err) {
+    res.status(500).json({ message: 'Error updating task', error: err.message });
   }
 });
 
