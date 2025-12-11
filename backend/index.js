@@ -6,6 +6,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const { connectMongo } = require('./db');
 const User = require('./models/User');
@@ -54,6 +55,7 @@ function toPublic(doc) {
   o.id = String(o._id);
   delete o._id;
   delete o.__v;
+  delete o.password_hash;
   return o;
 }
 
@@ -153,9 +155,10 @@ app.post('/api/users/register', async (req, res) => {
   }
   email = String(email).toLowerCase().trim();
   try {
+    const hashedPassword = await bcrypt.hash(password, 10); // הצפנה
     const user = await User.create({
       email,
-      password_hash: password,
+      password_hash: hashedPassword, // שמירת המוצפן
       full_name: fullName || null,
     });
     res.status(201).json(toPublic(user));
@@ -188,7 +191,7 @@ app.post('/api/users/forgot', async (req, res) => {
     const newPassword = generatePassword();
     
     // עדכון הסיסמה במסד הנתונים
-    user.password_hash = newPassword;
+    user.password_hash = await bcrypt.hash(newPassword, 10);
     user.reset_token = undefined;
     user.reset_token_expires_at = undefined;
     await user.save();
@@ -258,7 +261,7 @@ app.post('/api/users/reset', async (req, res) => {
     reset_token_expires_at: { $gte: new Date() },
   });
   if (!user) return res.status(400).json({ message: 'Invalid or expired token' });
-  user.password_hash = newPassword;
+  user.password_hash = await bcrypt.hash(newPassword, 10);
   user.reset_token = undefined;
   user.reset_token_expires_at = undefined;
   await user.save();
@@ -272,11 +275,18 @@ app.post('/api/users/login', async (req, res) => {
   }
   email = String(email).toLowerCase().trim();
   try {
-    const user = await User.findOne({ email, password_hash: password }).lean();
+    // 1. חיפוש לפי מייל בלבד
+    const user = await User.findOne({ email }).lean();
     if (!user) return res.status(401).json({ message: 'Invalid email or password' });
+
+    // 2. בדיקת הסיסמה המוצפנת
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) return res.status(401).json({ message: 'Invalid email or password' });
+
     user.id = String(user._id);
     delete user._id;
     delete user.__v;
+    delete user.password_hash;
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: 'Error logging in', error: err.message });
@@ -303,20 +313,23 @@ app.put('/api/users/:id/settings', async (req, res) => {
 app.put('/api/users/:id/password', async (req, res) => {
   const { id } = req.params;
   const { currentPassword, newPassword } = req.body;
+
   if (!currentPassword || !newPassword) {
-    return res.status(400).json({ message: 'currentPassword and newPassword are required' });
+    return res.status(400).json({ message: 'Current password and new password are required' });
   }
+
   try {
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
-    // בדיקת סיסמה נוכחית
-    if (user.password_hash !== currentPassword) {
+    // בדיקה: האם הסיסמה הנוכחית שהוזנה תואמת לסיסמה המוצפנת ב-DB?
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
       return res.status(401).json({ message: 'Current password is incorrect' });
     }
     
-    // עדכון סיסמה חדשה
-    user.password_hash = newPassword;
+    // הצפנה: הופכים את הסיסמה החדשה להאש לפני השמירה
+    user.password_hash = await bcrypt.hash(newPassword, 10);
     await user.save();
     
     res.json({ ok: true, message: 'Password changed successfully' });
