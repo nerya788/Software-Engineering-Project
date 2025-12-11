@@ -15,6 +15,12 @@ const Guest = require('./models/Guest');
 const Notification = require('./models/Notification');
 
 const app = express();
+// כתובות מותרות (גם לוקאלי וגם הייצור ב-Render)
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://wedding-planner-app-x373.onrender.com" 
+];
 const PORT = process.env.PORT || 4000;
 
 // 1. יצירת שרת HTTP ועטיפת האפליקציה של Express
@@ -23,8 +29,9 @@ const server = http.createServer(app);
 // 2. חיבור Socket.io לשרת
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:3000"], // הרשאות ל-Frontend
+    origin: allowedOrigins, // <--- שינוי לשימוש במשתנה למעלה
     methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
   },
 });
 
@@ -32,7 +39,11 @@ const io = new Server(server, {
 module.exports.io = io;
 
 // CORS & Middleware
-app.use(cors({ origin: true, credentials: true }));
+// CORS ל-Express
+app.use(cors({
+  origin: allowedOrigins, // <--- שינוי לשימוש במשתנה למעלה
+  credentials: true
+}));
 app.use(express.json());
 app.set('trust proxy', 1);
 
@@ -118,6 +129,7 @@ const healthHandler = (req, res) => {
     uptime: process.uptime(),
   });
 };
+app.get('/', (req, res) => res.send('Wedding Planner API is running! 🚀'));
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
