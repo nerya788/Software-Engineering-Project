@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
+import { API_URL } from '../config'; // <--- ייבוא הכתובת
 
 const EditEventForm = ({ currentUser }) => {
     const { eventId } = useParams();
@@ -13,7 +14,8 @@ const EditEventForm = ({ currentUser }) => {
     useEffect(() => {
         const fetchEvent = async () => {
             try {
-                const res = await axios.get(`http://localhost:4000/api/events/${eventId}`);
+                // שימוש ב-API_URL
+                const res = await axios.get(`${API_URL}/api/events/${eventId}`);
                 setFormData({
                     title: res.data.title,
                     eventDate: res.data.event_date ? res.data.event_date.split('T')[0] : '', 
@@ -30,7 +32,8 @@ const EditEventForm = ({ currentUser }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await axios.put(`http://localhost:4000/api/events/${eventId}`, formData);
+            // שימוש ב-API_URL
+            await axios.put(`${API_URL}/api/events/${eventId}`, formData);
             setMessage('עודכן בהצלחה! חוזר לדשבורד...');
             setTimeout(() => navigate('/'), 1500);
         } catch (err) {
@@ -43,7 +46,8 @@ const EditEventForm = ({ currentUser }) => {
         if (!window.confirm('האם אתה בטוח שברצונך למחוק את האירוע?')) return;
         
         try {
-            await axios.delete(`http://localhost:4000/api/events/${eventId}`);
+            // שימוש ב-API_URL
+            await axios.delete(`${API_URL}/api/events/${eventId}`);
             setMessage('האירוע נמחק! מעביר לדשבורד...');
             setTimeout(() => navigate('/'), 1500);
         } catch (err) {

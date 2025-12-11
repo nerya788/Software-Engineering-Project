@@ -6,6 +6,7 @@ import 'react-calendar/dist/Calendar.css';
 import { Bell, Settings } from 'lucide-react';
 import io from 'socket.io-client';
 import Countdown from './Countdown.jsx';
+import { API_URL } from '../config';
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const categories = ['general', 'vendors', 'budget', 'design', 'guests', 'logistics'];
@@ -46,9 +47,9 @@ const Dashboard = ({ currentUser, onLogout }) => {
     try {
       console.log('📥 טוען נתונים עבור משתמש:', currentUser.id);
       const [eventsRes, tasksRes, notifRes] = await Promise.all([
-        axios.get(`http://localhost:4000/api/events?userId=${currentUser.id}`),
-        axios.get(`http://localhost:4000/api/tasks?userId=${currentUser.id}`),
-        axios.get(`http://localhost:4000/api/notifications?userId=${currentUser.id}`)
+        axios.get(`${API_URL}/api/events?userId=${currentUser.id}`),
+        axios.get(`${API_URL}/api/tasks?userId=${currentUser.id}`),
+        axios.get(`${API_URL}/api/notifications?userId=${currentUser.id}`)
       ]);
       
       console.log('✅ נתונים נטענו:', {
@@ -86,7 +87,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
     if (!currentUser?.id) return;
 
     // חיבור ל-Socket
-    const socket = io('http://localhost:4000');
+    const socket = io(API_URL);
     socket.emit('register_user', currentUser.id);
     console.log('🔌 התחבר ל-Socket.io עבור משתמש:', currentUser.id);
 
@@ -135,7 +136,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const handleCreateEvent = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:4000/api/events', { userId: currentUser.id, ...eventForm });
+      const res = await axios.post(`${API_URL}/api/events`, { userId: currentUser.id, ...eventForm });
       // עדכון מיידי - טוען מחדש את כל הנתונים
       await fetchData();
       setEventForm({ title: '', eventDate: '', description: '' });
@@ -150,7 +151,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const handleCreateTask = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:4000/api/tasks', { userId: currentUser.id, ...taskForm });
+      const res = await axios.post(`${API_URL}/api/tasks`, { userId: currentUser.id, ...taskForm });
       // עדכון מיידי - טוען מחדש את כל הנתונים
       await fetchData();
       setTaskForm({ title: '', dueDate: '', isDone: false, category: 'general', assigneeName: '', assigneeEmail: '' });
@@ -164,7 +165,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
   const updateTask = async (taskId, updates) => {
     try {
-      const res = await axios.put(`http://localhost:4000/api/tasks/${taskId}`, updates);
+      const res = await axios.put(`${API_URL}/api/tasks/${taskId}`, updates);
       // עדכון מיידי - טוען מחדש את כל הנתונים
       await fetchData();
     } catch (err) {
@@ -179,7 +180,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
   const markAsRead = async (id) => {
     try {
-      await axios.put(`http://localhost:4000/api/notifications/${id}/read`);
+      await axios.put(`${API_URL}/api/notifications/${id}/read`);
       setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (err) {
       console.error('Error marking notification as read', err);

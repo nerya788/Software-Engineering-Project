@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
+import { API_URL } from './config';
 
 // ייבוא הרכיבים
 import Dashboard from './components/Dashboard.jsx';
@@ -24,7 +25,7 @@ function AuthComponent({ onLogin }) {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:4000/api/users/register', registerForm);
+      await axios.post(`${API_URL}/api/users/register`, registerForm);
       setMessage(`User registered! Please login.`);
       setMode('login');
       setRegisterForm({ email: '', password: '', fullName: '' });
@@ -36,7 +37,7 @@ function AuthComponent({ onLogin }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:4000/api/users/login', loginForm);
+      const res = await axios.post(`${API_URL}/api/users/login`, loginForm);
       console.log('✅ התחברות הצליחה:', res.data);
       if (onLogin && res.data) {
         // וודא שיש id למשתמש
@@ -56,7 +57,7 @@ function AuthComponent({ onLogin }) {
   const handleForgot = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:4000/api/users/forgot', forgotForm);
+      const res = await axios.post(`${API_URL}/api/users/forgot`, forgotForm);
       if (res.data.password) {
         // מצב פיתוח - מציג את הסיסמה החדשה
         setMessage(`סיסמה חדשה נוצרה! הסיסמה החדשה היא: ${res.data.password}`);

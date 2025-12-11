@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { API_URL } from '../config'; // <--- 1. ייבוא הכתובת
 
 const Settings = ({ currentUser, onUpdateUser }) => {
   // אתחול המצב לפי הנתונים הקיימים
@@ -21,7 +22,8 @@ const Settings = ({ currentUser, onUpdateUser }) => {
 
   const handleSave = async () => {
     try {
-      const res = await axios.put(`http://localhost:4000/api/users/${currentUser.id}/settings`, {
+      // 2. שימוש ב-API_URL
+      const res = await axios.put(`${API_URL}/api/users/${currentUser.id}/settings`, {
         notificationDays: days
       });
       
@@ -54,7 +56,8 @@ const Settings = ({ currentUser, onUpdateUser }) => {
     }
     
     try {
-      await axios.put(`http://localhost:4000/api/users/${currentUser.id}/password`, {
+      // 3. שימוש ב-API_URL
+      await axios.put(`${API_URL}/api/users/${currentUser.id}/password`, {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword
       });

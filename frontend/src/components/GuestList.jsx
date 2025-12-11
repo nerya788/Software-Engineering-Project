@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, Link } from 'react-router-dom';
+import { API_URL } from '../config'; // <--- 1. ייבוא הכתובת
 
 // --- אייקונים (SVG) ---
 const Icons = {
@@ -35,7 +36,8 @@ const GuestList = () => {
 
   const fetchGuests = async () => {
     try {
-      const response = await axios.get(`http://localhost:4000/api/events/${eventId}/guests`);
+      // 2. שימוש ב-API_URL
+      const response = await axios.get(`${API_URL}/api/events/${eventId}/guests`);
       setGuests(response.data);
       setLoading(false);
     } catch (err) { setLoading(false); }
@@ -54,7 +56,8 @@ const GuestList = () => {
     e.preventDefault();
     if (!newGuest.fullName) return;
     try {
-      const response = await axios.post('http://localhost:4000/api/guests', { eventId: eventId, ...newGuest });
+      // 3. שימוש ב-API_URL
+      const response = await axios.post(`${API_URL}/api/guests`, { eventId: eventId, ...newGuest });
       setGuests([response.data, ...guests]);
       setNewGuest({ fullName: '', phone: '', side: 'friend', amountInvited: 1, mealOption: 'standard', dietaryNotes: '' });
       setDuplicateWarning('');
@@ -64,14 +67,16 @@ const GuestList = () => {
   const handleDeleteGuest = async (guestId) => {
     if (!window.confirm("למחוק את האורח לצמיתות?")) return;
     try {
-      await axios.delete(`http://localhost:4000/api/guests/${guestId}`);
+      // 4. שימוש ב-API_URL
+      await axios.delete(`${API_URL}/api/guests/${guestId}`);
       setGuests(guests.filter(g => g.id !== guestId));
     } catch (err) { alert("שגיאה במחיקה"); }
   };
 
   const handleStatusChange = async (guestId, newStatus) => {
     try {
-      const response = await axios.put(`http://localhost:4000/api/guests/${guestId}`, { rsvpStatus: newStatus });
+      // 5. שימוש ב-API_URL
+      const response = await axios.put(`${API_URL}/api/guests/${guestId}`, { rsvpStatus: newStatus });
       setGuests(guests.map(g => g.id === guestId ? response.data : g));
     } catch (err) { console.error("שגיאה בעדכון סטטוס"); }
   };
@@ -83,7 +88,8 @@ const GuestList = () => {
 
   const saveEdit = async (guestId) => {
     try {
-      const response = await axios.put(`http://localhost:4000/api/guests/${guestId}`, { ...editFormData });
+      // 6. שימוש ב-API_URL
+      const response = await axios.put(`${API_URL}/api/guests/${guestId}`, { ...editFormData });
       setGuests(guests.map(g => g.id === guestId ? response.data : g));
       setEditingId(null);
     } catch (err) { alert("שגיאה בשמירה"); }
@@ -137,7 +143,6 @@ const GuestList = () => {
              <p className="text-slate-500 mt-2 text-sm">ניהול מרוכז של אישורי הגעה, סידורי הושבה ובקשות מיוחדות</p>
            </div>
            
-           {/* --- כאן היה ה"רשומות" שהורדתי --- */}
            <div className="text-center bg-purple-50 px-8 py-4 rounded-2xl border border-purple-100 shadow-sm">
               <span className="block text-3xl font-bold text-purple-600">{guests.reduce((sum, g) => sum + (g.amount_invited || 1), 0)}</span>
               <span className="text-xs text-purple-400 font-bold uppercase tracking-wider">סה"כ אורחים</span>
