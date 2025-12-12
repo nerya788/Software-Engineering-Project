@@ -7,6 +7,8 @@ import { Bell, Settings } from 'lucide-react';
 import io from 'socket.io-client';
 import Countdown from './Countdown.jsx';
 import { API_URL } from '../config';
+import { Wallet } from 'lucide-react'; 
+
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const categories = ['general', 'vendors', 'budget', 'design', 'guests', 'logistics'];
@@ -560,19 +562,33 @@ const Dashboard = ({ currentUser, onLogout }) => {
                     📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}
                   </p>
                   
-                  <Link 
-                    to={`/events/${ev.id}/guests`} 
-                    className="flex items-center justify-center gap-2 w-full bg-gray-900 text-white font-medium py-3 rounded-xl hover:bg-gray-800 transition shadow-lg shadow-gray-200"
-                  >
-                    <span>📋</span> ניהול רשימת מוזמנים
-                  </Link>
+                  {/* איזור הכפתורים - מסודר בתוך גריד לרווחים מושלמים */}
+                  <div className="grid grid-cols-1 gap-3">
+                    
+                    {/* 1. רשימת מוזמנים (שחור) */}
+                    <Link 
+                      to={`/events/${ev.id}/guests`} 
+                      className="flex items-center justify-center gap-2 w-full bg-gray-900 text-white font-medium py-3 rounded-xl hover:bg-gray-800 transition shadow-lg shadow-gray-200"
+                    >
+                      <span>📋</span> ניהול רשימת מוזמנים
+                    </Link>
 
-                  <Link 
-                    to={`/events/${ev.id}/edit`} 
-                    className="flex items-center justify-center gap-2 w-full bg-white border border-gray-200 text-gray-700 font-medium py-2 rounded-xl hover:bg-gray-50 transition mt-3"
-                  >
-                    <span>✏️</span> עריכת פרטים
-                  </Link>
+                    {/* 2. ניהול תקציב (ירוק) - שמנו אותו באמצע */}
+                    <Link 
+                      to={`/events/${ev.id}/budget`} 
+                      className="flex items-center justify-center gap-2 w-full bg-emerald-500 text-white font-medium py-3 rounded-xl hover:bg-emerald-600 transition shadow-lg shadow-emerald-200"
+                    >
+                      <Wallet size={18} /> ניהול תקציב
+                    </Link>
+
+                    {/* 3. עריכה (לבן) - בסוף */}
+                    <Link 
+                      to={`/events/${ev.id}/edit`} 
+                      className="flex items-center justify-center gap-2 w-full bg-white border border-gray-200 text-gray-700 font-medium py-2 rounded-xl hover:bg-gray-50 transition"
+                    >
+                      <span>✏️</span> עריכת פרטים
+                    </Link>
+                  </div>
                 </div>
               ))}
             </div>

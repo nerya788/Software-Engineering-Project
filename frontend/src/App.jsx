@@ -3,6 +3,7 @@ import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import { API_URL } from './config';
+import BudgetDashboard from './components/BudgetDashboard.jsx';
 
 // ייבוא הרכיבים
 import Dashboard from './components/Dashboard.jsx';
@@ -155,6 +156,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Dashboard currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/events/:eventId/guests" element={<GuestList />} />
+        <Route path="/events/:eventId/budget" element={<BudgetDashboard currentUser={currentUser} />} />
         <Route path="/events/:eventId/edit" element={<EditEventForm currentUser={currentUser} />} />
         
         {/* התיקון כאן: העברת הפונקציה לעדכון המשתמש */}

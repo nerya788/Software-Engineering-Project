@@ -14,6 +14,7 @@ const Event = require('./models/Event');
 const Task = require('./models/Task');
 const Guest = require('./models/Guest');
 const Notification = require('./models/Notification');
+const BudgetItem = require('./models/BudgetItem'); 
 
 const app = express();
 // כתובות מותרות (גם לוקאלי וגם הייצור ב-Render)
@@ -341,18 +342,30 @@ app.put('/api/users/:id/password', async (req, res) => {
 // --- Event Routes ---
 
 app.post('/api/events', async (req, res) => {
-  const { userId, title, eventDate, description } = req.body;
+  const { userId, title, eventDate, description, isMainEvent } = req.body; // הוספנו את isMainEvent
+  
   if (!userId || !title || !eventDate) {
     return res.status(400).json({ message: 'userId, title and eventDate are required' });
   }
+
   try {
+    // אם המשתמש ביקש שזה יהיה האירוע הראשי, נבטל את הראשיות מכל השאר
+    if (isMainEvent) {
+      await Event.updateMany({ user_id: userId }, { is_main_event: false });
+    }
+
+    // אם זה האירוע הראשון אי פעם של המשתמש, נהפוך אותו לראשי אוטומטית
+    const count = await Event.countDocuments({ user_id: userId });
+    const shouldBeMain = isMainEvent || count === 0;
+
     const ev = await Event.create({
       user_id: userId,
       title,
       event_date: new Date(eventDate),
       description: description || null,
+      is_main_event: shouldBeMain
     });
-    // שידור לסנכרון חלונות
+
     io.to(userId).emit('data_changed');
     res.status(201).json(toPublic(ev));
   } catch (err) {
@@ -602,6 +615,113 @@ app.put('/api/notifications/:id/read', async (req, res) => {
     res.status(500).json({ message: 'Error updating notification' });
   }
 });
+
+// --- Budget Routes (Updated) ---
+
+// 1. שליפת נתונים + התקציב שהוגדר
+app.get('/api/events/:eventId/budget', async (req, res) => {
+  const { eventId } = req.params;
+  try {
+    const event = await Event.findById(eventId); // שליפת האירוע כדי לקבל את התקציב
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    const items = await BudgetItem.find({ event_id: eventId }).sort({ created_at: -1 });
+    
+    // חישובים
+    const totalExpenses = items.reduce((acc, item) => acc + item.amount, 0);
+    const totalPaid = items.reduce((acc, item) => acc + (item.is_paid ? item.amount : (item.paid_amount || 0)), 0);
+    const budgetLimit = event.total_budget || 0;
+    const remaining = budgetLimit - totalExpenses;
+
+    // דאטה לגרף
+    const categoryMap = {};
+    items.forEach(item => {
+      if (!categoryMap[item.category]) categoryMap[item.category] = 0;
+      categoryMap[item.category] += item.amount;
+    });
+    
+    const chartData = Object.keys(categoryMap).map(key => ({
+      name: key,
+      value: categoryMap[key]
+    }));
+
+    res.json({
+      budgetLimit, // התקציב שהוגדר מראש
+      items: items.map(toPublic),
+      summary: { totalExpenses, totalPaid, remaining },
+      chartData
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching budget', error: err.message });
+  }
+});
+
+// 2. עדכון הגדרת התקציב הכולל לאירוע
+app.put('/api/events/:eventId/budget-limit', async (req, res) => {
+    const { eventId } = req.params;
+    const { totalBudget } = req.body;
+    try {
+        const event = await Event.findByIdAndUpdate(eventId, { total_budget: Number(totalBudget) }, { new: true });
+        io.to(String(event.user_id)).emit('data_changed');
+        res.json({ success: true, total_budget: event.total_budget });
+    } catch (err) {
+        res.status(500).json({ message: 'Error updating budget limit' });
+    }
+});
+
+// 3. הוספת הוצאה חדשה (תוקן כדי למנוע שגיאות)
+app.post('/api/budget', async (req, res) => {
+  const { eventId, title, amount, category, isPaid } = req.body;
+  
+  if (!eventId || !title || !amount) {
+      return res.status(400).json({ message: 'Missing required fields' });
+  }
+
+  try {
+    const newItem = await BudgetItem.create({
+      event_id: eventId,
+      title,
+      amount: Number(amount),
+      category: category || 'Other',
+      is_paid: isPaid || false
+    });
+
+    const event = await Event.findById(eventId);
+    if (event) io.to(String(event.user_id)).emit('data_changed');
+
+    res.status(201).json(toPublic(newItem));
+  } catch (err) {
+    console.error("Error adding budget item:", err);
+    res.status(500).json({ message: 'Error adding budget item', error: err.message });
+  }
+});
+
+// 4. מחיקת הוצאה
+app.delete('/api/budget/:id', async (req, res) => {
+  try {
+    const deleted = await BudgetItem.findByIdAndDelete(req.params.id);
+    if(deleted) {
+        const event = await Event.findById(deleted.event_id);
+        if (event) io.to(String(event.user_id)).emit('data_changed');
+    }
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting item' });
+  }
+});
+
+// 5. עדכון סטטוס תשלום
+app.put('/api/budget/:id', async (req, res) => {
+    try {
+        const updated = await BudgetItem.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const event = await Event.findById(updated.event_id);
+        if (event) io.to(String(event.user_id)).emit('data_changed');
+        res.json(toPublic(updated));
+    } catch(err) {
+        res.status(500).json({ message: 'Error updating' });
+    }
+});
+
 
 // --- Server Start ---
 
