@@ -15,6 +15,7 @@ const Task = require('./models/Task');
 const Guest = require('./models/Guest');
 const Notification = require('./models/Notification');
 const BudgetItem = require('./models/BudgetItem'); 
+const XLSX = require('xlsx'); 
 
 const app = express();
 // כתובות מותרות (גם לוקאלי וגם הייצור ב-Render)
@@ -722,6 +723,156 @@ app.put('/api/budget/:id', async (req, res) => {
     }
 });
 
+// --- ייבוא ספריות לטיפול בקבצים ---
+const multer = require('multer');
+const csv = require('csv-parser');
+const { Parser } = require('json2csv');
+const fs = require('fs');
+const upload = multer({ dest: 'uploads/' }); // תיקייה זמנית לקבצים
+
+// --- Guest Import/Export Routes ---
+
+// 1. ייצוא לאקסל אמיתי (XLSX) - תומך בעברית מושלם
+app.get('/api/events/:eventId/guests/export', async (req, res) => {
+  try {
+    const guests = await Guest.find({ event_id: req.params.eventId }).lean();
+    
+    if (guests.length === 0) {
+        return res.status(400).send('אין מוזמנים לייצוא');
+    }
+
+    // מילונים להמרה לעברית
+    const sideMap = { 'groom': 'צד חתן', 'bride': 'צד כלה', 'family': 'משפחה', 'friend': 'חברים' };
+    const statusMap = { 'attending': 'מגיע', 'declined': 'לא מגיע', 'pending': 'טרם ענה', 'maybe': 'אולי' };
+    const mealMap = { 'standard': 'רגיל', 'veggie': 'צמחוני', 'vegan': 'טבעוני', 'kids': 'מנת ילדים' };
+
+    // עיצוב הנתונים לפורמט של אקסל
+    const excelData = guests.map(g => ({
+        'שם מלא': g.full_name,
+        'טלפון': g.phone || '',
+        'אימייל': g.email || '',
+        'צד': sideMap[g.side] || 'חברים',
+        'כמות מוזמנים': g.amount_invited || 1,
+        'סטטוס הגעה': statusMap[g.rsvp_status] || 'טרם ענה',
+        'סוג מנה': mealMap[g.meal_option] || 'רגיל',
+        'הערות': g.dietary_notes || ''
+    }));
+
+    // יצירת חוברת עבודה (Workbook) וגיליון (Worksheet)
+    const workBook = XLSX.utils.book_new();
+    const workSheet = XLSX.utils.json_to_sheet(excelData);
+
+    // התאמת רוחב עמודות אוטומטית (כדי שיראה יפה)
+    const wscols = [
+        { wch: 20 }, // שם מלא
+        { wch: 15 }, // טלפון
+        { wch: 20 }, // אימייל
+        { wch: 10 }, // צד
+        { wch: 12 }, // כמות
+        { wch: 12 }, // סטטוס
+        { wch: 10 }, // מנה
+        { wch: 30 }  // הערות
+    ];
+    workSheet['!cols'] = wscols;
+
+    XLSX.utils.book_append_sheet(workBook, workSheet, "רשימת מוזמנים");
+
+    // יצירת הקובץ בזיכרון (Buffer)
+    const buffer = XLSX.write(workBook, { type: "buffer", bookType: "xlsx" });
+
+    // שליחת הקובץ לדפדפן
+    res.setHeader('Content-Disposition', 'attachment; filename="Guests_List.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+
+  } catch (err) {
+    console.error('Export Error:', err);
+    res.status(500).send('שגיאה בייצוא הקובץ');
+  }
+});
+
+// 2. ייבוא חכם (Smart Import) - תומך ב-Excel ו-CSV
+app.post('/api/events/:eventId/guests/import', upload.single('file'), async (req, res) => {
+    const results = [];
+    const { eventId } = req.params;
+
+    if (!req.file) return res.status(400).json({ message: 'לא נבחר קובץ' });
+
+    console.log(`📂 התקבל קובץ: ${req.file.originalname}`);
+
+    try {
+        // קריאת הקובץ באמצעות ספריית XLSX (תומכת בהכל: xlsx, xls, csv)
+        const workbook = XLSX.readFile(req.file.path);
+        const sheetName = workbook.SheetNames[0]; // לוקחים את הגיליון הראשון
+        const sheet = workbook.Sheets[sheetName];
+        
+        // המרה ל-JSON שטוח (מחזיר מערך של אובייקטים)
+        const rawData = XLSX.utils.sheet_to_json(sheet);
+
+        // מילון המרה לסטטוסים
+        const statusMap = {
+            'מגיע': 'attending', 'כן': 'attending', 'yes': 'attending',
+            'לא': 'declined', 'לא מגיע': 'declined', 'no': 'declined',
+            'אולי': 'maybe', 'maybe': 'maybe', '?': 'maybe'
+        };
+
+        // עיבוד הנתונים
+        rawData.forEach(row => {
+            // ניקוי מפתחות (Trim) למקרה שיש רווחים בכותרות
+            const cleanRow = {};
+            Object.keys(row).forEach(key => {
+                cleanRow[key.trim()] = row[key];
+            });
+
+            // חיפוש גמיש של שם
+            const name = cleanRow['שם'] || cleanRow['שם מלא'] || cleanRow['Name'] || cleanRow['Full Name'];
+
+            if (name) {
+                const phone = cleanRow['טלפון'] || cleanRow['נייד'] || cleanRow['Phone'] || '';
+                
+                // טיפול בסטטוס
+                const statusRaw = cleanRow['סטטוס'] || cleanRow['אישור הגעה'] || cleanRow['Status'];
+                // אם הערך הוא בוליאני (TRUE/FALSE מאקסל), נמיר אותו
+                let rsvpStatus = 'pending';
+                if (typeof statusRaw === 'string') {
+                    rsvpStatus = statusMap[statusRaw.trim()] || 'pending';
+                } else if (statusRaw === true) {
+                    rsvpStatus = 'attending';
+                }
+
+                const amountRaw = cleanRow['כמות'] || cleanRow['מספר אורחים'] || cleanRow['Amount'];
+                const amountInvited = Number(amountRaw) || 1;
+
+                results.push({
+                    event_id: eventId,
+                    full_name: name,
+                    phone: String(phone), // ממיר למחרוזת למקרה שאקסל שלח מספר
+                    amount_invited: amountInvited,
+                    rsvp_status: rsvpStatus,
+                    side: 'friend',
+                    meal_option: 'standard'
+                });
+            }
+        });
+
+        if (results.length > 0) {
+            await Guest.insertMany(results);
+            const event = await Event.findById(eventId);
+            if (event) io.to(String(event.user_id)).emit('data_changed');
+            
+            res.json({ message: `נטענו בהצלחה ${results.length} מוזמנים`, count: results.length });
+        } else {
+            res.json({ message: 'לא נמצאו רשומות תקינות בקובץ', count: 0 });
+        }
+
+        // ניקוי
+        fs.unlinkSync(req.file.path);
+
+    } catch (err) {
+        console.error('❌ Import Error:', err);
+        res.status(500).json({ message: 'שגיאה בעיבוד הקובץ', error: err.message });
+    }
+}); 
 
 // --- Server Start ---
 
