@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useParams, Link } from 'react-router-dom';
-import { API_URL } from '../config'; // <--- 1. ייבוא הכתובת
+import { API_URL } from '../config';
 
-// --- אייקונים (SVG) ---
+// --- אייקונים ---
 const Icons = {
   Search: () => <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
   UserAdd: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>,
@@ -11,11 +11,14 @@ const Icons = {
   Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
   Check: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>,
   X: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>,
-  Back: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+  Back: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>,
+  Download: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+  Upload: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
 };
 
 const GuestList = () => {
-  const { eventId } = useParams(); 
+  const { eventId } = useParams();
+  const fileInputRef = useRef(null);
   
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,12 +39,47 @@ const GuestList = () => {
 
   const fetchGuests = async () => {
     try {
-      // 2. שימוש ב-API_URL
       const response = await axios.get(`${API_URL}/api/events/${eventId}/guests`);
       setGuests(response.data);
       setLoading(false);
     } catch (err) { setLoading(false); }
   };
+
+  const handleExport = () => {
+      window.open(`${API_URL}/api/events/${eventId}/guests/export`, '_blank');
+  };
+
+  const handleFileSelect = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+          setLoading(true);
+          await axios.post(`${API_URL}/api/events/${eventId}/guests/import`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+          alert('הקובץ נטען בהצלחה!');
+          fetchGuests();
+      } catch (err) { alert('שגיאה בטעינת הקובץ'); setLoading(false); }
+      e.target.value = '';
+  };
+
+  // --- עדכון כמות מוזמנים מהיר ---
+  const updateAmount = async (guestId, newAmount) => {
+      const amount = parseInt(newAmount, 10);
+      if (!amount || amount < 1) return; // מניעת מספרים לא חוקיים
+      
+      try {
+          // עדכון אופטימי (מקומי) כדי שהממשק ירגיש מהיר
+          setGuests(prev => prev.map(g => g.id === guestId ? { ...g, amount_invited: amount } : g));
+          
+          // שליחה לשרת
+          await axios.put(`${API_URL}/api/guests/${guestId}`, { amountInvited: amount });
+      } catch (err) {
+          console.error("שגיאה בעדכון כמות");
+          fetchGuests(); // אם נכשל, נחזיר למצב האמיתי מהשרת
+      }
+  };
+  // ------------------------------
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -56,7 +94,6 @@ const GuestList = () => {
     e.preventDefault();
     if (!newGuest.fullName) return;
     try {
-      // 3. שימוש ב-API_URL
       const response = await axios.post(`${API_URL}/api/guests`, { eventId: eventId, ...newGuest });
       setGuests([response.data, ...guests]);
       setNewGuest({ fullName: '', phone: '', side: 'friend', amountInvited: 1, mealOption: 'standard', dietaryNotes: '' });
@@ -67,7 +104,6 @@ const GuestList = () => {
   const handleDeleteGuest = async (guestId) => {
     if (!window.confirm("למחוק את האורח לצמיתות?")) return;
     try {
-      // 4. שימוש ב-API_URL
       await axios.delete(`${API_URL}/api/guests/${guestId}`);
       setGuests(guests.filter(g => g.id !== guestId));
     } catch (err) { alert("שגיאה במחיקה"); }
@@ -75,7 +111,6 @@ const GuestList = () => {
 
   const handleStatusChange = async (guestId, newStatus) => {
     try {
-      // 5. שימוש ב-API_URL
       const response = await axios.put(`${API_URL}/api/guests/${guestId}`, { rsvpStatus: newStatus });
       setGuests(guests.map(g => g.id === guestId ? response.data : g));
     } catch (err) { console.error("שגיאה בעדכון סטטוס"); }
@@ -88,7 +123,6 @@ const GuestList = () => {
 
   const saveEdit = async (guestId) => {
     try {
-      // 6. שימוש ב-API_URL
       const response = await axios.put(`${API_URL}/api/guests/${guestId}`, { ...editFormData });
       setGuests(guests.map(g => g.id === guestId ? response.data : g));
       setEditingId(null);
@@ -101,7 +135,6 @@ const GuestList = () => {
     return matchesSearch && matchesFilter;
   });
 
-  // --- Helpers לעיצוב ---
   const getSideBadge = (side) => {
     const styles = { 
       groom: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20', 
@@ -128,64 +161,94 @@ const GuestList = () => {
   return (
     <div className="min-h-screen bg-[#f1f5f9] p-8 font-sans text-slate-800" dir="rtl">
       
-      <div className="max-w-[1400px] mx-auto mb-8">
+      <div className="max-w-[1400px] mx-auto mb-8 flex justify-between items-center">
         <Link to="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-purple-600 transition font-medium text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 hover:shadow-md">
           <Icons.Back /> חזרה לדשבורד
         </Link>
+
+        <div className="flex gap-3">
+            <button onClick={handleExport} className="inline-flex items-center gap-2 text-slate-600 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 hover:bg-slate-50 text-sm font-medium transition">
+                <Icons.Download /> ייצוא לאקסל
+            </button>
+            <button onClick={() => fileInputRef.current.click()} className="inline-flex items-center gap-2 text-slate-600 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 hover:bg-slate-50 text-sm font-medium transition">
+                <Icons.Upload /> ייבוא מאקסל
+            </button>
+            <input type="file" ref={fileInputRef} className="hidden" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onChange={handleFileSelect} />
+        </div>
       </div>
 
       <div className="max-w-[1400px] mx-auto bg-white shadow-xl shadow-slate-200/60 rounded-2xl overflow-hidden border border-slate-200">
         
-        {/* Header */}
         <div className="p-8 border-b border-slate-100 bg-white flex flex-col md:flex-row justify-between items-center gap-4">
            <div>
              <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">ניהול מוזמנים</h2>
              <p className="text-slate-500 mt-2 text-sm">ניהול מרוכז של אישורי הגעה, סידורי הושבה ובקשות מיוחדות</p>
            </div>
-           
            <div className="text-center bg-purple-50 px-8 py-4 rounded-2xl border border-purple-100 shadow-sm">
               <span className="block text-3xl font-bold text-purple-600">{guests.reduce((sum, g) => sum + (g.amount_invited || 1), 0)}</span>
               <span className="text-xs text-purple-400 font-bold uppercase tracking-wider">סה"כ אורחים</span>
            </div>
         </div>
 
-        {/* Add Form Area */}
         <div className="bg-slate-50/80 p-8 border-b border-slate-200 backdrop-blur-sm">
           <div className="flex items-center gap-2 mb-6 text-purple-700 font-bold text-sm uppercase tracking-wide">
             <span className="bg-purple-100 p-1.5 rounded-lg"><Icons.UserAdd /></span> הוספת אורח חדש
           </div>
-          <form onSubmit={handleAddGuest} className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-            <div className="md:col-span-3">
+          <form onSubmit={handleAddGuest} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+            
+            {/* שם מלא - הקטנו ל-2 עמודות כדי לפנות מקום */}
+            <div className="md:col-span-2">
               <input type="text" name="fullName" className="input-field" placeholder="שם מלא *" value={newGuest.fullName} onChange={handleInputChange} required />
-              {duplicateWarning && <p className="text-xs text-rose-500 mt-1.5 font-medium flex items-center gap-1">⚠️ {duplicateWarning}</p>}
+              {duplicateWarning && <p className="text-xs text-rose-500 mt-1 font-medium absolute">⚠️ {duplicateWarning}</p>}
             </div>
+            
+            {/* טלפון */}
+            <div className="md:col-span-2">
+              <input type="tel" name="phone" className="input-field" placeholder="טלפון" value={newGuest.phone} onChange={handleInputChange} />
+            </div>
+            
+            {/* כמות */}
+            <div className="md:col-span-1">
+               <input 
+                 type="number" 
+                 min="1" 
+                 name="amountInvited" 
+                 className="input-field text-center px-1" 
+                 placeholder="#" 
+                 value={newGuest.amountInvited} 
+                 onChange={handleInputChange} 
+               />
+            </div>
+
+            {/* צד */}
             <div className="md:col-span-2">
               <select name="side" className="input-field bg-white cursor-pointer" value={newGuest.side} onChange={handleInputChange}>
                 <option value="friend">חברים</option><option value="bride">צד כלה</option><option value="groom">צד חתן</option><option value="family">משפחה</option>
               </select>
             </div>
-            <div className="md:col-span-2">
-              <input type="tel" name="phone" className="input-field" placeholder="טלפון" value={newGuest.phone} onChange={handleInputChange} />
-            </div>
+            
+            {/* מנה */}
             <div className="md:col-span-2">
               <select name="mealOption" className="input-field bg-white cursor-pointer" value={newGuest.mealOption} onChange={handleInputChange}>
                 <option value="standard">מנה רגילה</option><option value="veggie">צמחוני</option><option value="vegan">טבעוני</option><option value="kids">ילדים</option>
               </select>
             </div>
+            
+            {/* הערות - הרחבנו ל-2 עמודות */}
             <div className="md:col-span-2">
-              <input type="text" name="dietaryNotes" className="input-field" placeholder="הערות תזונה" value={newGuest.dietaryNotes} onChange={handleInputChange} />
+              <input type="text" name="dietaryNotes" className="input-field" placeholder="הערות" value={newGuest.dietaryNotes} onChange={handleInputChange} />
             </div>
+            
+            {/* כפתור */}
             <div className="md:col-span-1">
-              <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl h-[48px] flex items-center justify-center transition shadow-lg shadow-purple-200 active:scale-95">
+              <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl w-full h-[46px] flex items-center justify-center transition shadow-md active:scale-95" title="הוסף לרשימה">
                 <Icons.UserAdd />
               </button>
             </div>
           </form>
         </div>
 
-        {/* List Content */}
         <div className="p-8 bg-white min-h-[600px]">
-          {/* Filters */}
           <div className="flex flex-col md:flex-row gap-5 mb-8 justify-between items-center">
             <div className="relative flex-1 max-w-md w-full group">
               <span className="absolute top-3.5 right-4 text-slate-400 group-focus-within:text-purple-500 transition-colors"><Icons.Search /></span>
@@ -202,7 +265,6 @@ const GuestList = () => {
             </div>
           </div>
 
-          {/* Table */}
           <div className="overflow-hidden border border-slate-200 rounded-xl shadow-sm ring-1 ring-slate-900/5">
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/80">
@@ -227,16 +289,12 @@ const GuestList = () => {
                   filteredGuests.map((guest) => (
                     <tr key={guest.id} className={`transition duration-150 group ${editingId === guest.id ? 'bg-purple-50/40 ring-1 ring-purple-100' : 'hover:bg-slate-50'}`}>
                       {editingId === guest.id ? (
-                        /* ================== מצב עריכה ================== */
+                        /* עריכה מלאה */
                         <>
                           <td className="p-3 align-middle"><input type="text" className="input-table font-bold" value={editFormData.fullName} onChange={(e) => setEditFormData({...editFormData, fullName: e.target.value})} /></td>
                           <td className="p-3 align-middle"><input type="text" className="input-table font-mono text-xs" value={editFormData.phone} onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})} /></td>
                           <td className="p-3 align-middle"><select className="input-table" value={editFormData.side} onChange={(e) => setEditFormData({...editFormData, side: e.target.value})}><option value="friend">חברים</option><option value="bride">כלה</option><option value="groom">חתן</option><option value="family">משפחה</option></select></td>
-                          <td className="p-3 align-middle text-center">
-                             <select className={`w-full py-1.5 px-1 text-xs font-bold rounded-lg cursor-pointer outline-none text-center shadow-sm border border-slate-200 ${getStatusClass(editFormData.rsvpStatus)}`} value={editFormData.rsvpStatus} onChange={(e) => setEditFormData({...editFormData, rsvpStatus: e.target.value})}>
-                                <option value="pending">❓ טרם</option><option value="attending">✅ מגיע</option><option value="declined">❌ לא</option>
-                             </select>
-                          </td>
+                          <td className="p-3 align-middle text-center"><select className={`w-full py-1.5 px-1 text-xs font-bold rounded-lg cursor-pointer outline-none text-center shadow-sm border border-slate-200 ${getStatusClass(editFormData.rsvpStatus)}`} value={editFormData.rsvpStatus} onChange={(e) => setEditFormData({...editFormData, rsvpStatus: e.target.value})}><option value="pending">❓ טרם</option><option value="attending">✅ מגיע</option><option value="declined">❌ לא</option></select></td>
                           <td className="p-3 align-middle"><select className="input-table" value={editFormData.mealOption} onChange={(e) => setEditFormData({...editFormData, mealOption: e.target.value})}><option value="standard">רגיל</option><option value="veggie">צמחוני</option><option value="vegan">טבעוני</option><option value="kids">ילדים</option></select></td>
                           <td className="p-3 align-middle"><input type="text" className="input-table" value={editFormData.dietaryNotes} onChange={(e) => setEditFormData({...editFormData, dietaryNotes: e.target.value})} /></td>
                           <td className="p-3 align-middle"><input type="number" min="1" className="input-table text-center font-bold" value={editFormData.amountInvited} onChange={(e) => setEditFormData({...editFormData, amountInvited: e.target.value})} /></td>
@@ -248,13 +306,11 @@ const GuestList = () => {
                           </td>
                         </>
                       ) : (
-                        /* ================== מצב תצוגה ================== */
+                        /* תצוגה */
                         <>
                           <td className="td-cell font-semibold text-slate-800">{guest.full_name}</td>
                           <td className="td-cell text-slate-500 font-mono text-xs">{guest.phone || '-'}</td>
                           <td className="td-cell">{getSideBadge(guest.side)}</td>
-                          
-                          {/* סטטוס (כמוסה) */}
                           <td className="td-cell text-center">
                             <div className="relative inline-block w-full max-w-[100px]">
                               <select
@@ -268,10 +324,27 @@ const GuestList = () => {
                               </select>
                             </div>
                           </td>
-
                           <td className="td-cell text-xs text-slate-600 font-medium bg-slate-50/50 rounded px-2 py-1 inline-block mt-3 md:mt-0 md:bg-transparent">{getMealLabel(guest.meal_option)}</td>
                           <td className="td-cell text-xs text-slate-400 italic truncate max-w-[120px]" title={guest.dietary_notes}>{guest.dietary_notes}</td>
-                          <td className="td-cell text-center"><span className="inline-flex items-center justify-center w-8 h-8 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 shadow-sm">{guest.amount_invited}</span></td>
+                          
+                          {/* תא כמות עם עריכה מהירה */}
+                          <td className="td-cell text-center">
+                              <input 
+                                type="number" 
+                                min="1"
+                                defaultValue={guest.amount_invited}
+                                onBlur={(e) => {
+                                    if(Number(e.target.value) !== guest.amount_invited) {
+                                        updateAmount(guest.id, e.target.value);
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if(e.key === 'Enter') e.target.blur();
+                                }}
+                                className="w-12 text-center bg-slate-100 focus:bg-white border border-transparent focus:border-purple-500 rounded text-xs font-bold py-1 outline-none transition"
+                              />
+                          </td>
+
                           <td className="td-cell text-left">
                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0">
                               <button onClick={() => startEditing(guest)} className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition"><Icons.Edit /></button>
@@ -290,12 +363,10 @@ const GuestList = () => {
       </div>
       
       <style>{`
-        .input-field { width: 100%; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 0.75rem; font-size: 0.95rem; outline: none; transition: all 0.2s; background: white; }
+        .input-field { width: 100%; padding: 12px 12px; border: 1px solid #e2e8f0; border-radius: 0.75rem; font-size: 0.9rem; outline: none; transition: all 0.2s; background: white; }
         .input-field:focus { border-color: #a855f7; box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.1); }
-        
         .input-table { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.85rem; outline: none; transition: all 0.2s; background: white; }
         .input-table:focus { border-color: #9333ea; box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.1); }
-        
         .th-cell { padding: 16px 20px; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
         .td-cell { padding: 16px 20px; white-space: nowrap; vertical-align: middle; border-bottom: 1px solid #f1f5f9; }
       `}</style>
