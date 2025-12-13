@@ -22,8 +22,10 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://wedding-planner-app-x373.onrender.com" 
-];
+  // כאן אנחנו קוראים את המשתנה מ-Render (או מ-.env)
+  process.env.FRONTEND_URL 
+].filter(Boolean); // מסנן ערכים ריקים (אם אין משתנה מוגדר)
+
 const PORT = process.env.PORT || 4000;
 
 // 1. יצירת שרת HTTP ועטיפת האפליקציה של Express
