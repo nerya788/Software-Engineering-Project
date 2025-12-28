@@ -3,12 +3,10 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { Bell, Settings } from 'lucide-react';
+import { Bell, Settings, Wallet } from 'lucide-react';
 import io from 'socket.io-client';
 import Countdown from './Countdown.jsx';
 import { API_URL } from '../config';
-import { Wallet } from 'lucide-react'; 
-
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const categories = ['general', 'vendors', 'budget', 'design', 'guests', 'logistics'];
@@ -120,7 +118,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
   }, [currentUser?.id]);
 
-  // מיון משימות ואירועים לפי תאריך (חייב להיות לפני השימוש ב-nextEvent)
+  // מיון משימות ואירועים לפי תאריך
   const sortedTasks = [...tasks].sort((a, b) => {
     if (!a.due_date && !b.due_date) return 0;
     if (!a.due_date) return 1;
@@ -138,8 +136,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const handleCreateEvent = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(`${API_URL}/api/events`, { userId: currentUser.id, ...eventForm });
-      // עדכון מיידי - טוען מחדש את כל הנתונים
+      await axios.post(`${API_URL}/api/events`, { userId: currentUser.id, ...eventForm });
       await fetchData();
       setEventForm({ title: '', eventDate: '', description: '' });
       setMessage('האירוע נוצר בהצלחה! 🎉');
@@ -153,8 +150,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const handleCreateTask = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(`${API_URL}/api/tasks`, { userId: currentUser.id, ...taskForm });
-      // עדכון מיידי - טוען מחדש את כל הנתונים
+      await axios.post(`${API_URL}/api/tasks`, { userId: currentUser.id, ...taskForm });
       await fetchData();
       setTaskForm({ title: '', dueDate: '', isDone: false, category: 'general', assigneeName: '', assigneeEmail: '' });
       setMessage('המשימה נוצרה בהצלחה! ✅');
@@ -167,8 +163,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
   const updateTask = async (taskId, updates) => {
     try {
-      const res = await axios.put(`${API_URL}/api/tasks/${taskId}`, updates);
-      // עדכון מיידי - טוען מחדש את כל הנתונים
+      await axios.put(`${API_URL}/api/tasks/${taskId}`, updates);
       await fetchData();
     } catch (err) {
       console.error('Error updating task', err);
@@ -195,15 +190,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
     return statusOk && catOk;
   });
 
-  const tasksForSelectedDate = visibleTasks.filter(task => {
-    if (!task.due_date) return false;
-    return new Date(task.due_date).toDateString() === date.toDateString();
-  });
-
-  const eventsForSelectedDate = sortedEvents.filter(e => 
-    new Date(e.event_date).toDateString() === date.toDateString()
-  );
-
   const tileContent = ({ date, view }) => {
     if (view === 'month') {
       const hasTask = sortedTasks.some(t => t.due_date && new Date(t.due_date).toDateString() === date.toDateString());
@@ -218,13 +204,13 @@ const Dashboard = ({ currentUser, onLogout }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 font-sans" dir="rtl">
+    <div className="min-h-screen pb-20 font-sans transition-colors duration-300 bg-surface-50 dark:bg-surface-900 text-surface-900 dark:text-surface-50" dir="rtl">
       
-      <header className="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50 border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+      <header className="sticky top-0 z-50 border-b shadow-sm bg-white/80 dark:bg-surface-800/80 backdrop-blur-md border-surface-100 dark:border-surface-700">
+        <div className="flex items-center justify-between px-6 py-4 mx-auto max-w-7xl">
           <div className="flex items-center gap-2">
             <span className="text-2xl">💍</span>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold text-transparent bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text">
               Wedding Planner
             </h1>
           </div>
@@ -233,33 +219,33 @@ const Dashboard = ({ currentUser, onLogout }) => {
              <div className="relative">
                 <button 
                   onClick={() => setShowNotifications(!showNotifications)}
-                  className="relative p-2 rounded-full hover:bg-gray-100 transition text-gray-600"
+                  className="relative p-2 transition rounded-full hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300"
                 >
                   <Bell size={24} />
                   {notifications.length > 0 && (
-                    <span className="absolute top-0 right-0 h-3 w-3 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+                    <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
                   )}
                 </button>
 
                 {showNotifications && (
-                  <div className="absolute left-0 mt-3 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50">
-                    <div className="p-3 border-b bg-gray-50 font-bold text-gray-700 flex justify-between items-center">
+                  <div className="absolute left-0 z-50 overflow-hidden bg-white border shadow-2xl mt-3 w-80 rounded-xl dark:bg-surface-800 border-surface-100 dark:border-surface-700">
+                    <div className="flex items-center justify-between p-3 font-bold border-b bg-surface-50 dark:bg-surface-700 border-surface-100 dark:border-surface-600 text-surface-700 dark:text-surface-200">
                       <span>התראות</span>
-                      <span className="text-xs font-normal text-gray-500">{notifications.length} חדשות</span>
+                      <span className="text-xs font-normal text-surface-500 dark:text-surface-400">{notifications.length} חדשות</span>
                     </div>
-                    <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                    <div className="overflow-y-auto max-h-64 custom-scrollbar">
                       {notifications.length === 0 ? (
-                        <div className="p-6 text-center text-gray-400 text-sm">אין התראות חדשות 🎉</div>
+                        <div className="p-6 text-sm text-center text-surface-400">אין התראות חדשות 🎉</div>
                       ) : (
                         notifications.map(n => (
-                          <div key={n.id} className="p-3 border-b hover:bg-purple-50 transition flex justify-between items-start gap-3">
+                          <div key={n.id} className="flex items-start justify-between gap-3 p-3 transition border-b dark:border-surface-700 hover:bg-purple-50 dark:hover:bg-surface-700">
                             <div>
-                              <p className="text-sm text-gray-700 font-medium">{n.message}</p>
-                              <p className="text-xs text-gray-400 mt-1">{new Date(n.created_at).toLocaleDateString('he-IL')}</p>
+                              <p className="text-sm font-medium text-surface-700 dark:text-surface-200">{n.message}</p>
+                              <p className="mt-1 text-xs text-surface-400">{new Date(n.created_at).toLocaleDateString('he-IL')}</p>
                             </div>
                             <button 
                               onClick={() => markAsRead(n.id)} 
-                              className="text-xs text-purple-600 hover:text-purple-800 font-bold shrink-0 bg-purple-100 px-2 py-1 rounded-md"
+                              className="px-2 py-1 text-xs font-bold text-purple-600 rounded-md shrink-0 bg-purple-100 hover:text-purple-800 dark:bg-purple-900/50 dark:text-purple-300"
                             >
                               ✓
                             </button>
@@ -271,48 +257,48 @@ const Dashboard = ({ currentUser, onLogout }) => {
                 )}
              </div>
 
-             <span className="text-gray-600 font-medium hidden md:inline">היי, {currentUser.full_name}</span>
+             <span className="hidden font-medium text-surface-600 dark:text-surface-300 md:inline">היי, {currentUser.full_name}</span>
              
-             <Link to="/settings" className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition" title="הגדרות">
+             <Link to="/settings" className="p-2 transition rounded-full hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300" title="הגדרות">
                <Settings size={20} />
              </Link>
 
-             <button onClick={onLogout} className="text-sm bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-700 px-4 py-2 rounded-full transition border border-gray-200">
+             <button onClick={onLogout} className="px-4 py-2 text-sm transition border rounded-full bg-surface-100 dark:bg-surface-700 dark:border-surface-600 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-300 text-surface-700 dark:text-surface-200 border-surface-200">
                יציאה
              </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="px-6 py-8 mx-auto max-w-7xl">
         
         {nextEvent && <Countdown targetDate={nextEvent.event_date} title={nextEvent.title} />}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+        <div className="grid grid-cols-1 gap-8 mb-12 lg:grid-cols-12">
           
-          <div className="lg:col-span-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 h-fit">
+          <div className="h-fit lg:col-span-4 p-6 bg-white dark:bg-surface-800 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700">
             
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">🗓️ לוח שנה</h2>
-              <div className="bg-gray-100 p-1 rounded-lg flex text-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-surface-800 dark:text-surface-100">🗓️ לוח שנה</h2>
+              <div className="flex p-1 rounded-lg bg-surface-100 dark:bg-surface-700 text-sm">
                 <button 
                   onClick={() => setViewMode('month')}
-                  className={`px-3 py-1 rounded-md transition ${viewMode === 'month' ? 'bg-white shadow text-purple-600 font-bold' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`px-3 py-1 rounded-md transition ${viewMode === 'month' ? 'bg-white dark:bg-surface-600 shadow text-purple-600 dark:text-purple-300 font-bold' : 'text-surface-500 dark:text-surface-400 hover:text-surface-700'}`}
                 >
                   חודש
                 </button>
                 <button 
                   onClick={() => setViewMode('week')}
-                  className={`px-3 py-1 rounded-md transition ${viewMode === 'week' ? 'bg-white shadow text-purple-600 font-bold' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`px-3 py-1 rounded-md transition ${viewMode === 'week' ? 'bg-white dark:bg-surface-600 shadow text-purple-600 dark:text-purple-300 font-bold' : 'text-surface-500 dark:text-surface-400 hover:text-surface-700'}`}
                 >
                   שבוע
                 </button>
               </div>
             </div>
 
-            <div className="ltr-calendar"> 
+            <div className="ltr-calendar dark:text-surface-200"> 
               {viewMode === 'month' ? (
-                <Calendar onChange={setDate} value={date} tileContent={tileContent} locale="he-IL" />
+                <Calendar onChange={setDate} value={date} tileContent={tileContent} locale="he-IL" className="dark:bg-surface-800 dark:text-surface-200 react-calendar-dark" />
               ) : (
                 <div className="flex flex-col gap-2">
                   {Array.from({ length: 7 }).map((_, i) => {
@@ -329,14 +315,14 @@ const Dashboard = ({ currentUser, onLogout }) => {
                         key={i} 
                         onClick={() => setDate(weekDate)}
                         className={`p-3 rounded-xl border cursor-pointer transition flex justify-between items-center
-                          ${isSelected ? 'bg-purple-50 border-purple-200 ring-1 ring-purple-100' : 'bg-gray-50 border-gray-100 hover:bg-white'}
+                          ${isSelected ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 ring-1 ring-purple-100 dark:ring-purple-900' : 'bg-surface-50 dark:bg-surface-700 border-surface-100 dark:border-surface-600 hover:bg-white dark:hover:bg-surface-600'}
                         `}
                       >
                         <div className="flex items-center gap-3">
-                           <span className={`font-bold ${isSelected ? 'text-purple-700' : 'text-gray-600'}`}>
+                           <span className={`font-bold ${isSelected ? 'text-purple-700 dark:text-purple-300' : 'text-surface-600 dark:text-surface-300'}`}>
                              {weekDate.toLocaleDateString('he-IL', { weekday: 'long' })}
                            </span>
-                           <span className="text-xs text-gray-400">
+                           <span className="text-xs text-surface-400">
                              {weekDate.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}
                            </span>
                         </div>
@@ -352,81 +338,81 @@ const Dashboard = ({ currentUser, onLogout }) => {
             </div>
           </div>
 
-          <div className="lg:col-span-8 bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col min-h-[500px]">
-            <div className="flex flex-col gap-4 mb-6 border-b border-gray-100 pb-4">
-              <div className="flex justify-between items-end">
+          <div className="flex flex-col lg:col-span-8 p-8 bg-white dark:bg-surface-800 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 min-h-[500px]">
+            <div className="flex flex-col gap-4 pb-4 mb-6 border-b border-surface-100 dark:border-surface-700">
+              <div className="flex items-end justify-between">
                 <div>
-                  <p className="text-gray-500 text-sm mb-1">משימות ואירועים עבור</p>
-                  <h2 className="text-2xl font-bold text-gray-800">
+                  <p className="mb-1 text-sm text-surface-500 dark:text-surface-400">משימות ואירועים עבור</p>
+                  <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">
                     {date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </h2>
                 </div>
-                <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${visibleTasks.length > 0 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}>
+                <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${visibleTasks.length > 0 ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' : 'bg-surface-100 dark:bg-surface-700 text-surface-500 dark:text-surface-400'}`}>
                   {visibleTasks.length} משימות
                 </span>
               </div>
               <div className="flex flex-wrap gap-3">
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white">
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 text-sm bg-white border rounded-xl border-surface-200 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200">
                   <option value="all">כל הסטטוסים</option>
                   <option value="todo">פתוחות</option>
                   <option value="in_progress">בתהליך</option>
                   <option value="done">הושלמו</option>
                 </select>
-                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white">
+                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-2 text-sm bg-white border rounded-xl border-surface-200 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200">
                   <option value="all">כל הקטגוריות</option>
                   {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-              {/* הצגת כל האירועים - לא רק של התאריך הנבחר */}
+            <div className="flex-1 pr-2 space-y-3 overflow-y-auto custom-scrollbar">
+              {/* הצגת כל האירועים */}
               {sortedEvents.length > 0 && sortedEvents.map(ev => (
-                <div key={ev.id} className="p-4 bg-gradient-to-r from-pink-50 to-white border-r-4 border-pink-500 rounded-xl shadow-sm mb-3">
-                  <div className="flex justify-between items-start">
+                <div key={ev.id} className="p-4 mb-3 border-r-4 border-pink-500 shadow-sm bg-gradient-to-r from-pink-50 to-white dark:from-surface-700 dark:to-surface-800 rounded-xl">
+                  <div className="flex items-start justify-between">
                     <div>
-                        <h3 className="font-bold text-gray-800">{ev.title}</h3>
-                        <p className="text-sm text-gray-500">{ev.description || 'אין תיאור'}</p>
-                        <p className="text-xs text-gray-400 mt-1">📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}</p>
+                        <h3 className="font-bold text-surface-800 dark:text-surface-100">{ev.title}</h3>
+                        <p className="text-sm text-surface-500 dark:text-surface-400">{ev.description || 'אין תיאור'}</p>
+                        <p className="mt-1 text-xs text-surface-400">📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}</p>
                     </div>
-                    <Link to={`/events/${ev.id}/edit`} className="text-xs bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">
+                    <Link to={`/events/${ev.id}/edit`} className="px-2 py-1 text-xs bg-white border rounded border-surface-200 dark:bg-surface-700 dark:border-surface-600 hover:bg-surface-50 dark:text-surface-200">
                         ערוך
                     </Link>
                   </div>
                 </div>
               ))}
               
-              {/* הצגת כל המשימות המסוננות - לא רק של התאריך הנבחר */}
+              {/* הצגת כל המשימות המסוננות */}
               {visibleTasks.length === 0 ? (
                 sortedEvents.length === 0 && (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-3 text-2xl">☕</div>
+                  <div className="flex flex-col items-center justify-center h-full text-surface-400">
+                    <div className="flex items-center justify-center w-16 h-16 mb-3 text-2xl rounded-full bg-surface-50 dark:bg-surface-700">☕</div>
                     <p className="text-lg font-medium">אין משימות או אירועים</p>
                     <p className="text-sm opacity-70">יום חופש! או שתוסיף משימה/אירוע למטה?</p>
                   </div>
                 )
               ) : (
                 visibleTasks.map(task => (
-                  <div key={task.id} className="group flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-2xl hover:bg-white hover:shadow-md hover:border-purple-100 transition duration-200">
+                  <div key={task.id} className="flex items-center justify-between p-4 transition duration-200 border group bg-surface-50 dark:bg-surface-700/50 border-surface-100 dark:border-surface-700 rounded-2xl hover:bg-white dark:hover:bg-surface-700 hover:shadow-md hover:border-purple-100 dark:hover:border-purple-900">
                     <div className="flex items-center gap-4">
                       <button
                         onClick={() => toggleTaskDone(task)}
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${task.is_done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-purple-400'}`}
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${task.is_done ? 'bg-green-500 border-green-500' : 'border-surface-300 dark:border-surface-500 hover:border-purple-400'}`}
                         title="סמן כהושלם"
                       >
-                        {task.is_done && <span className="text-white text-xs">✓</span>}
+                        {task.is_done && <span className="text-xs text-white">✓</span>}
                       </button>
                       <div>
-                        <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                        <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-surface-400' : 'text-surface-800 dark:text-surface-100'}`}>
                           {task.title}
                         </h3>
                         <div className="flex flex-wrap gap-2 mt-1 text-xs">
-                          <span className={`px-2 py-0.5 rounded-md ${task.is_done ? 'bg-green-100 text-green-700' : task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          <span className={`px-2 py-0.5 rounded-md ${task.is_done ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : task.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
                             {task.is_done ? 'הושלם' : task.status === 'in_progress' ? 'בתהליך' : 'פתוחה'}
                           </span>
-                          <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">קטגוריה: {task.category || 'כללי'}</span>
-                          {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">אחראי: {task.assignee_name}</span>}
-                          {task.due_date && <span className="px-2 py-0.5 rounded-md bg-pink-50 text-pink-700">דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}</span>}
+                          <span className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-700 dark:bg-surface-600 dark:text-surface-200">קטגוריה: {task.category || 'כללי'}</span>
+                          {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">אחראי: {task.assignee_name}</span>}
+                          {task.due_date && <span className="px-2 py-0.5 rounded-md bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300">דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}</span>}
                         </div>
                       </div>
                     </div>
@@ -447,32 +433,32 @@ const Dashboard = ({ currentUser, onLogout }) => {
           return overdueTasks.length > 0 && (
             <section className="mb-12">
               <div className="flex items-center gap-4 mb-6">
-                <h2 className="text-2xl font-bold text-red-600 flex items-center gap-2">
+                <h2 className="flex items-center gap-2 text-2xl font-bold text-red-600 dark:text-red-400">
                   ⚠️ משימות באיחור ({overdueTasks.length})
                 </h2>
-                <div className="h-px flex-1 bg-gray-200"></div>
+                <div className="flex-1 h-px bg-surface-200 dark:bg-surface-700"></div>
               </div>
-              <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
+              <div className="p-6 border-2 border-red-200 rounded-2xl bg-red-50 dark:bg-red-900/10 dark:border-red-900/50">
                 <div className="space-y-3">
                   {overdueTasks.map(task => (
-                    <div key={task.id} className="bg-white p-4 rounded-xl border border-red-200 flex items-center justify-between">
-                      <div className="flex items-center gap-4 flex-1">
+                    <div key={task.id} className="flex items-center justify-between p-4 bg-white border border-red-200 rounded-xl dark:bg-surface-800 dark:border-red-900/30">
+                      <div className="flex items-center flex-1 gap-4">
                         <button
                           onClick={() => toggleTaskDone(task)}
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${task.is_done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-red-400'}`}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${task.is_done ? 'bg-green-500 border-green-500' : 'border-surface-300 dark:border-surface-500 hover:border-red-400'}`}
                           title="סמן כהושלם"
                         >
-                          {task.is_done && <span className="text-white text-xs">✓</span>}
+                          {task.is_done && <span className="text-xs text-white">✓</span>}
                         </button>
                         <div className="flex-1">
-                          <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                          <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-surface-400' : 'text-surface-800 dark:text-surface-100'}`}>
                             {task.title}
                           </h3>
                           <div className="flex flex-wrap gap-2 mt-1 text-xs">
-                            <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-700 font-bold">באיחור</span>
-                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">קטגוריה: {task.category || 'כללי'}</span>
-                            {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">אחראי: {task.assignee_name}</span>}
-                            {task.due_date && <span className="px-2 py-0.5 rounded-md bg-red-50 text-red-700">דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}</span>}
+                            <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 font-bold">באיחור</span>
+                            <span className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-700 dark:bg-surface-600 dark:text-surface-200">קטגוריה: {task.category || 'כללי'}</span>
+                            {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">אחראי: {task.assignee_name}</span>}
+                            {task.due_date && <span className="px-2 py-0.5 rounded-md bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300">דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}</span>}
                           </div>
                         </div>
                       </div>
@@ -484,49 +470,49 @@ const Dashboard = ({ currentUser, onLogout }) => {
           );
         })()}
 
-        {/* כל המשימות (חוץ מהושלמו) */}
+        {/* כל המשימות */}
         <section className="mb-12">
           <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">כל המשימות</h2>
-            <div className="h-px flex-1 bg-gray-200"></div>
+            <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">כל המשימות</h2>
+            <div className="flex-1 h-px bg-surface-200 dark:bg-surface-700"></div>
           </div>
           
           {loading ? (
-            <div className="text-center py-10">טוען נתונים...</div>
+            <div className="py-10 text-center text-surface-500 dark:text-surface-400">טוען נתונים...</div>
           ) : (() => {
             const activeTasks = sortedTasks.filter(task => !task.is_done);
             return activeTasks.length === 0 ? (
-              <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-gray-300">
-                <p className="text-gray-500">אין משימות פעילות. כל המשימות הושלמו! 🎉</p>
+              <div className="py-10 text-center bg-white border border-dashed rounded-2xl border-surface-300 dark:bg-surface-800 dark:border-surface-600">
+                <p className="text-surface-500 dark:text-surface-400">אין משימות פעילות. כל המשימות הושלמו! 🎉</p>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="p-6 bg-white border rounded-2xl border-surface-100 dark:bg-surface-800 dark:border-surface-700">
                 <div className="space-y-3">
                   {activeTasks.map(task => (
-                    <div key={task.id} className="p-4 bg-gray-50 border border-gray-100 rounded-xl hover:bg-white hover:shadow-md transition flex items-center justify-between">
-                      <div className="flex items-center gap-4 flex-1">
+                    <div key={task.id} className="flex items-center justify-between p-4 transition border rounded-xl bg-surface-50 border-surface-100 dark:bg-surface-700 dark:border-surface-600 hover:bg-white dark:hover:bg-surface-600 hover:shadow-md">
+                      <div className="flex items-center flex-1 gap-4">
                         <button
                           onClick={() => toggleTaskDone(task)}
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${task.is_done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-purple-400'}`}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${task.is_done ? 'bg-green-500 border-green-500' : 'border-surface-300 dark:border-surface-500 hover:border-purple-400'}`}
                           title="סמן כהושלם"
                         >
-                          {task.is_done && <span className="text-white text-xs">✓</span>}
+                          {task.is_done && <span className="text-xs text-white">✓</span>}
                         </button>
                         <div className="flex-1">
-                          <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                          <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-surface-400' : 'text-surface-800 dark:text-surface-100'}`}>
                             {task.title}
                           </h3>
                           <div className="flex flex-wrap gap-2 mt-1 text-xs">
-                            <span className={`px-2 py-0.5 rounded-md ${task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                            <span className={`px-2 py-0.5 rounded-md ${task.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
                               {task.status === 'in_progress' ? 'בתהליך' : 'פתוחה'}
                             </span>
-                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">קטגוריה: {task.category || 'כללי'}</span>
-                            {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">אחראי: {task.assignee_name}</span>}
+                            <span className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-700 dark:bg-surface-600 dark:text-surface-200">קטגוריה: {task.category || 'כללי'}</span>
+                            {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">אחראי: {task.assignee_name}</span>}
                             {task.due_date && (
                               <span className={`px-2 py-0.5 rounded-md ${
                                 new Date(task.due_date) < new Date() 
-                                  ? 'bg-red-50 text-red-700 font-bold' 
-                                  : 'bg-pink-50 text-pink-700'
+                                  ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 font-bold' 
+                                  : 'bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300'
                               }`}>
                                 דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}
                               </span>
@@ -544,47 +530,42 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
         <section className="mb-12">
           <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">האירועים שלי</h2>
-            <div className="h-px flex-1 bg-gray-200"></div>
+            <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">האירועים שלי</h2>
+            <div className="flex-1 h-px bg-surface-200 dark:bg-surface-700"></div>
           </div>
           
-          {loading ? <div className="text-center py-10">טוען נתונים...</div> : sortedEvents.length === 0 ? (
-            <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-gray-300">
-              <p className="text-gray-500">עדיין אין אירועים. צור את האירוע הראשון שלך למטה!</p>
+          {loading ? <div className="py-10 text-center text-surface-500 dark:text-surface-400">טוען נתונים...</div> : sortedEvents.length === 0 ? (
+            <div className="py-10 text-center bg-white border border-dashed rounded-2xl border-surface-300 dark:bg-surface-800 dark:border-surface-600">
+              <p className="text-surface-500 dark:text-surface-400">עדיין אין אירועים. צור את האירוע הראשון שלך למטה!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {sortedEvents.map(ev => (
-                <div key={ev.id} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition duration-300 relative overflow-hidden group">
+                <div key={ev.id} className="relative overflow-hidden transition duration-300 bg-white border shadow-sm group rounded-3xl dark:bg-surface-800 border-surface-100 dark:border-surface-700 p-6 hover:shadow-xl hover:-translate-y-1">
                   <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500"></div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">{ev.title}</h3>
-                  <p className="text-gray-500 mb-8 flex items-center gap-2 text-sm bg-gray-50 w-fit px-3 py-1 rounded-full">
+                  <h3 className="mb-2 text-xl font-bold text-surface-800 dark:text-surface-100">{ev.title}</h3>
+                  <p className="flex items-center w-fit gap-2 px-3 py-1 mb-8 text-sm rounded-full text-surface-500 dark:text-surface-300 bg-surface-50 dark:bg-surface-700">
                     📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}
                   </p>
                   
-                  {/* איזור הכפתורים - מסודר בתוך גריד לרווחים מושלמים */}
                   <div className="grid grid-cols-1 gap-3">
-                    
-                    {/* 1. רשימת מוזמנים (שחור) */}
                     <Link 
                       to={`/events/${ev.id}/guests`} 
-                      className="flex items-center justify-center gap-2 w-full bg-gray-900 text-white font-medium py-3 rounded-xl hover:bg-gray-800 transition shadow-lg shadow-gray-200"
+                      className="flex items-center justify-center w-full gap-2 py-3 font-medium text-white transition bg-gray-900 rounded-xl hover:bg-gray-800 shadow-lg shadow-gray-200 dark:shadow-none"
                     >
                       <span>📋</span> ניהול רשימת מוזמנים
                     </Link>
 
-                    {/* 2. ניהול תקציב (ירוק) - שמנו אותו באמצע */}
                     <Link 
                       to={`/events/${ev.id}/budget`} 
-                      className="flex items-center justify-center gap-2 w-full bg-emerald-500 text-white font-medium py-3 rounded-xl hover:bg-emerald-600 transition shadow-lg shadow-emerald-200"
+                      className="flex items-center justify-center w-full gap-2 py-3 font-medium text-white transition bg-emerald-500 rounded-xl hover:bg-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-none"
                     >
                       <Wallet size={18} /> ניהול תקציב
                     </Link>
 
-                    {/* 3. עריכה (לבן) - בסוף */}
                     <Link 
                       to={`/events/${ev.id}/edit`} 
-                      className="flex items-center justify-center gap-2 w-full bg-white border border-gray-200 text-gray-700 font-medium py-2 rounded-xl hover:bg-gray-50 transition"
+                      className="flex items-center justify-center w-full gap-2 py-2 font-medium transition bg-white border rounded-xl border-surface-200 text-surface-700 hover:bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200 dark:hover:bg-surface-600"
                     >
                       <span>✏️</span> עריכת פרטים
                     </Link>
@@ -595,35 +576,35 @@ const Dashboard = ({ currentUser, onLogout }) => {
           )}
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="bg-purple-100 p-2 rounded-lg text-purple-600 text-sm">✚</span> 
+          <div className="p-8 bg-white border shadow-sm dark:bg-surface-800 rounded-3xl border-surface-100 dark:border-surface-700">
+            <h3 className="flex items-center gap-2 mb-6 text-xl font-bold text-surface-800 dark:text-surface-100">
+              <span className="p-2 text-sm text-purple-600 rounded-lg bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300">✚</span> 
               משימה חדשה
             </h3>
             <form onSubmit={handleCreateTask} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">מה צריך לעשות?</label>
-                <input type="text" placeholder="למשל: לקבוע פגישה עם הצלם..." className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition" 
+                <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">מה צריך לעשות?</label>
+                <input type="text" placeholder="למשל: לקבוע פגישה עם הצלם..." className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800" 
                   value={taskForm.title} onChange={e => setTaskForm({...taskForm, title: e.target.value})} required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">תאריך יעד</label>
-                <input type="date" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition" 
+                <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תאריך יעד</label>
+                <input type="date" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800" 
                   value={taskForm.dueDate} onChange={e => setTaskForm({...taskForm, dueDate: e.target.value})} required />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">קטגוריה</label>
-                  <select className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition"
+                  <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">קטגוריה</label>
+                  <select className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
                     value={taskForm.category} onChange={e => setTaskForm({...taskForm, category: e.target.value})}>
                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">סטטוס</label>
-                  <select className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition"
+                  <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">סטטוס</label>
+                  <select className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
                     value={taskForm.status || 'todo'} onChange={e => setTaskForm({...taskForm, status: e.target.value})}>
                     <option value="todo">פתוחה</option>
                     <option value="in_progress">בתהליך</option>
@@ -631,48 +612,48 @@ const Dashboard = ({ currentUser, onLogout }) => {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">אחראי (שם)</label>
-                  <input type="text" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition"
+                  <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">אחראי (שם)</label>
+                  <input type="text" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
                     value={taskForm.assigneeName} onChange={e => setTaskForm({...taskForm, assigneeName: e.target.value})} placeholder="שם האחראי" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">אחראי (אימייל)</label>
-                  <input type="email" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none transition"
+                  <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">אחראי (אימייל)</label>
+                  <input type="email" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
                     value={taskForm.assigneeEmail} onChange={e => setTaskForm({...taskForm, assigneeEmail: e.target.value})} placeholder="email@example.com" />
                 </div>
               </div>
-              <button className="w-full bg-purple-600 text-white font-bold py-3.5 rounded-xl hover:bg-purple-700 transition shadow-lg shadow-purple-200 mt-2">
+              <button className="w-full py-3.5 mt-2 font-bold text-white transition bg-purple-600 rounded-xl hover:bg-purple-700 shadow-lg shadow-purple-200 dark:shadow-none">
                 הוסף משימה לרשימה
               </button>
             </form>
           </div>
 
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="bg-pink-100 p-2 rounded-lg text-pink-600 text-sm">✚</span> 
+          <div className="p-8 bg-white border shadow-sm dark:bg-surface-800 rounded-3xl border-surface-100 dark:border-surface-700">
+            <h3 className="flex items-center gap-2 mb-6 text-xl font-bold text-surface-800 dark:text-surface-100">
+              <span className="p-2 text-sm text-pink-600 rounded-lg bg-pink-100 dark:bg-pink-900/30 dark:text-pink-300">✚</span> 
               אירוע חדש
             </h3>
             <form onSubmit={handleCreateEvent} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">שם האירוע</label>
-                <input type="text" placeholder="למשל: חינה / שבת חתן / חתונה" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none transition" 
+                <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">שם האירוע</label>
+                <input type="text" placeholder="למשל: חינה / שבת חתן / חתונה" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
                   value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} required />
               </div>
               <div className="grid grid-cols-2 gap-4">
                  <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">תאריך</label>
-                   <input type="date" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none transition" 
+                   <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תאריך</label>
+                   <input type="date" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
                     value={eventForm.eventDate} onChange={e => setEventForm({...eventForm, eventDate: e.target.value})} required />
                  </div>
                  <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">תיאור (אופציונלי)</label>
-                   <input type="text" placeholder="פרטים..." className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none transition" 
+                   <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תיאור (אופציונלי)</label>
+                   <input type="text" placeholder="פרטים..." className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
                     value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} />
                  </div>
               </div>
-              <button className="w-full bg-pink-500 text-white font-bold py-3.5 rounded-xl hover:bg-pink-600 transition shadow-lg shadow-pink-200 mt-2">
+              <button className="w-full py-3.5 mt-2 font-bold text-white transition bg-pink-500 rounded-xl hover:bg-pink-600 shadow-lg shadow-pink-200 dark:shadow-none">
                 צור אירוע חדש
               </button>
             </form>
@@ -680,7 +661,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
         </div>
 
         {message && (
-          <div className="fixed bottom-8 left-8 bg-gray-900/90 backdrop-blur text-white px-6 py-4 rounded-2xl shadow-2xl animate-fade-in-up flex items-center gap-3 z-50">
+          <div className="fixed z-50 flex items-center gap-3 px-6 py-4 text-white shadow-2xl bottom-8 left-8 bg-gray-900/90 backdrop-blur rounded-2xl animate-fade-in-up">
             <span className="text-xl">✨</span> {message}
           </div>
         )}

@@ -1,3 +1,39 @@
 @tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-50 text-surface-900 dark:bg-surface-900 dark:text-surface-50 transition-colors duration-300;
+    min-height: 100vh;
+    margin: 0;
+  }
+
+  /* הגדרות גלובליות לשדות קלט וכפתורים */
+  input, select, textarea, button {
+    @apply transition-colors duration-300;
+  }
+  
+  /* במצב לילה: שדות קלט כהים - עכשיו זה יעבוד כי הוספנו את ה-700 לקונפיג */
+  .dark input, .dark select, .dark textarea {
+    @apply bg-surface-700 border-surface-600 text-white placeholder-surface-400;
+  }
+
+  /* כפתורים כלליים במצב לילה (שאין להם צבע ספציפי) */
+  .dark button:not([class*="bg-"]) {
+    @apply bg-surface-700 text-white;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeIn 0.5s ease-out forwards;
+}
