@@ -146,35 +146,35 @@ export default function BudgetDashboard() {
   const usagePercent = budgetLimit > 0 ? (summary.totalExpenses / budgetLimit) * 100 : 0;
   const isOverBudget = summary.totalExpenses > budgetLimit && budgetLimit > 0;
 
-  if (loading) return <div className="flex justify-center items-center h-screen text-purple-600">טוען נתונים...</div>;
+  if (loading) return <div className="flex items-center justify-center h-screen text-purple-600 dark:text-purple-400">טוען נתונים...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-20 font-sans text-gray-800" dir="rtl">
+    <div className="min-h-screen pb-20 font-sans transition-colors duration-300 bg-surface-50 dark:bg-surface-900 text-surface-900 dark:text-surface-50" dir="rtl">
       
       {/* --- Header --- */}
-      <div className="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
+      <div className="sticky top-0 z-10 bg-white border-b shadow-sm dark:bg-surface-800 border-surface-100 dark:border-surface-700">
+          <div className="flex items-center justify-between px-4 py-4 mx-auto max-w-7xl md:px-6">
             <div className="flex items-center gap-3">
-                <button onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-full transition text-gray-500">
+                <button onClick={() => navigate('/')} className="p-2 transition rounded-full hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-500 dark:text-surface-400">
                     <ArrowRight size={20} />
                 </button>
                 <div>
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
+                    <h1 className="text-2xl font-bold text-transparent bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text">
                         ניהול תקציב
                     </h1>
-                    <p className="text-xs text-gray-400 hidden md:block">נהל את ההוצאות שלך בחכמה</p>
+                    <p className="hidden text-xs text-surface-400 md:block">נהל את ההוצאות שלך בחכמה</p>
                 </div>
             </div>
             <div className="flex gap-2">
                 <button 
                     onClick={exportToCSV}
-                    className="bg-white border border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl hover:bg-gray-50 flex items-center gap-2 transition text-sm font-medium"
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition bg-white border rounded-xl border-surface-200 text-surface-600 hover:bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200 dark:hover:bg-surface-600"
                 >
                     <Download size={18} /> <span className="hidden md:inline">ייצוא</span>
                 </button>
                 <button 
                     onClick={() => setIsModalOpen(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-purple-200 flex items-center gap-2 transition transform hover:scale-105 font-medium text-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white transition transform bg-purple-600 rounded-xl shadow-lg hover:bg-purple-700 hover:scale-105 shadow-purple-200 dark:shadow-none"
                 >
                     <Plus size={20} /> הוצאה חדשה
                 </button>
@@ -182,65 +182,65 @@ export default function BudgetDashboard() {
           </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+      <div className="px-4 py-8 mx-auto max-w-7xl md:px-6">
 
         {/* --- Top Cards --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                <div className="flex justify-between items-start mb-2">
-                    <p className="text-gray-500 text-sm font-medium">יעד תקציב</p>
-                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Wallet size={20} /></div>
+        <div className="grid grid-cols-1 gap-6 mb-8 md:grid-cols-3">
+            <div className="relative overflow-hidden bg-white border shadow-sm dark:bg-surface-800 rounded-2xl border-surface-100 dark:border-surface-700">
+                <div className="flex items-start justify-between mb-2">
+                    <p className="text-sm font-medium text-surface-500 dark:text-surface-400">יעד תקציב</p>
+                    <div className="p-2 text-blue-600 rounded-lg bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400"><Wallet size={20} /></div>
                 </div>
                 {isEditingLimit ? (
                     <div className="flex items-center gap-2 mt-1">
                         <input 
                             type="number" 
-                            className="w-full p-1 border-b-2 border-blue-500 outline-none text-xl font-bold"
+                            className="w-full p-1 text-xl font-bold bg-transparent border-b-2 border-blue-500 outline-none dark:text-white"
                             value={tempLimit}
                             onChange={(e) => setTempLimit(e.target.value)}
                             autoFocus
                         />
-                        <button onClick={updateBudgetLimit} className="text-xs bg-blue-500 text-white px-3 py-1 rounded-md">שמור</button>
+                        <button onClick={updateBudgetLimit} className="px-3 py-1 text-xs text-white bg-blue-500 rounded-md">שמור</button>
                     </div>
                 ) : (
-                    <div className="flex items-end gap-2 cursor-pointer group" onClick={() => setIsEditingLimit(true)}>
-                        <h2 className="text-3xl font-bold text-gray-800">₪{Number(budgetLimit).toLocaleString()}</h2>
-                        <Edit2 size={14} className="text-gray-300 group-hover:text-blue-500 mb-2 transition" />
+                    <div className="flex items-end gap-2 transition cursor-pointer group" onClick={() => setIsEditingLimit(true)}>
+                        <h2 className="text-3xl font-bold text-surface-800 dark:text-white">₪{Number(budgetLimit).toLocaleString()}</h2>
+                        <Edit2 size={14} className="mb-2 transition text-surface-300 group-hover:text-blue-500 dark:text-surface-600" />
                     </div>
                 )}
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                <div className="flex justify-between items-start mb-2">
-                    <p className="text-gray-500 text-sm font-medium">נוצל בפועל</p>
-                    <div className={`p-2 rounded-lg ${isOverBudget ? 'bg-red-50 text-red-600' : 'bg-purple-50 text-purple-600'}`}><TrendingUp size={20} /></div>
+            <div className="relative overflow-hidden bg-white border shadow-sm dark:bg-surface-800 rounded-2xl border-surface-100 dark:border-surface-700">
+                <div className="flex items-start justify-between mb-2">
+                    <p className="text-sm font-medium text-surface-500 dark:text-surface-400">נוצל בפועל</p>
+                    <div className={`p-2 rounded-lg ${isOverBudget ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400'}`}><TrendingUp size={20} /></div>
                 </div>
-                <h2 className={`text-3xl font-bold ${isOverBudget ? 'text-red-600' : 'text-gray-800'}`}>
+                <h2 className={`text-3xl font-bold ${isOverBudget ? 'text-red-600 dark:text-red-400' : 'text-surface-800 dark:text-white'}`}>
                     ₪{summary.totalExpenses.toLocaleString()}
                 </h2>
-                <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4 overflow-hidden">
+                <div className="w-full mt-4 overflow-hidden rounded-full bg-surface-100 dark:bg-surface-700 h-1.5">
                     <div className={`h-1.5 rounded-full transition-all duration-500 ${isOverBudget ? 'bg-red-500' : 'bg-purple-500'}`} style={{ width: `${Math.min(usagePercent, 100)}%` }}></div>
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                <div className="flex justify-between items-start mb-2">
-                    <p className="text-gray-500 text-sm font-medium">יתרה לשימוש</p>
-                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><AlertCircle size={20} /></div>
+            <div className="relative overflow-hidden bg-white border shadow-sm dark:bg-surface-800 rounded-2xl border-surface-100 dark:border-surface-700">
+                <div className="flex items-start justify-between mb-2">
+                    <p className="text-sm font-medium text-surface-500 dark:text-surface-400">יתרה לשימוש</p>
+                    <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><AlertCircle size={20} /></div>
                 </div>
-                <h2 className={`text-3xl font-bold ${summary.remaining < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                <h2 className={`text-3xl font-bold ${summary.remaining < 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                     ₪{summary.remaining.toLocaleString()}
                 </h2>
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="mt-2 text-xs text-surface-400">
                     {summary.remaining < 0 ? 'חריגה מהתקציב!' : 'נותר לשימוש חופשי'}
                 </p>
             </div>
         </div>
 
-        {/* --- Charts Section (New & Improved) --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-[350px]">
-                <h3 className="font-bold text-gray-700 mb-4 text-sm">התפלגות הוצאות (עוגה)</h3>
+        {/* --- Charts Section --- */}
+        <div className="grid grid-cols-1 gap-6 mb-8 lg:grid-cols-2">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-surface-100 dark:bg-surface-800 dark:border-surface-700 h-[350px]">
+                <h3 className="mb-4 text-sm font-bold text-surface-700 dark:text-surface-200">התפלגות הוצאות (עוגה)</h3>
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                         <Pie
@@ -258,16 +258,16 @@ export default function BudgetDashboard() {
                 </ResponsiveContainer>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-[350px]">
-                <h3 className="font-bold text-gray-700 mb-4 text-sm">הוצאות לפי קטגוריה (עמודות)</h3>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-surface-100 dark:bg-surface-800 dark:border-surface-700 h-[350px]">
+                <h3 className="mb-4 text-sm font-bold text-surface-700 dark:text-surface-200">הוצאות לפי קטגוריה (עמודות)</h3>
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                        <XAxis dataKey="name" fontSize={10} angle={-15} textAnchor="end" interval={0} height={50} />
-                        <YAxis fontSize={12} width={40} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
+                        <XAxis dataKey="name" fontSize={10} angle={-15} textAnchor="end" interval={0} height={50} stroke="#94a3b8" />
+                        <YAxis fontSize={12} width={40} stroke="#94a3b8" />
                         <Tooltip 
                             formatter={(value) => `₪${value.toLocaleString()}`}
-                            cursor={{ fill: '#f9fafb' }}
+                            cursor={{ fill: 'rgba(0,0,0,0.05)' }}
                             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                         />
                         <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={30} />
@@ -277,14 +277,14 @@ export default function BudgetDashboard() {
         </div>
 
         {/* --- List Section with Filters --- */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-hidden bg-white border shadow-sm dark:bg-surface-800 rounded-2xl border-surface-100 dark:border-surface-700">
             
             {/* Filters Bar */}
-            <div className="p-4 border-b border-gray-50 flex flex-col md:flex-row gap-4 justify-between items-center bg-gray-50/50">
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                    <Filter size={16} className="text-gray-400" />
+            <div className="flex flex-col items-center justify-between gap-4 p-4 border-b md:flex-row border-surface-50 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-700/30">
+                <div className="flex items-center w-full gap-2 md:w-auto">
+                    <Filter size={16} className="text-surface-400" />
                     <select 
-                        className="bg-white border border-gray-200 text-sm rounded-lg p-2 focus:ring-2 focus:ring-purple-500 outline-none"
+                        className="p-2 text-sm bg-white border rounded-lg outline-none border-surface-200 focus:ring-2 focus:ring-purple-500 dark:bg-surface-800 dark:border-surface-600 dark:text-surface-200"
                         value={filterCategory}
                         onChange={(e) => setFilterCategory(e.target.value)}
                     >
@@ -295,11 +295,11 @@ export default function BudgetDashboard() {
                     </select>
                 </div>
                 <div className="relative w-full md:w-64">
-                    <Search size={16} className="absolute right-3 top-3 text-gray-400" />
+                    <Search size={16} className="absolute right-3 top-3 text-surface-400" />
                     <input 
                         type="text" 
                         placeholder="חיפוש הוצאה או ספק..." 
-                        className="w-full pr-10 pl-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                        className="w-full py-2 pl-4 text-sm bg-white border rounded-lg outline-none pr-10 border-surface-200 focus:ring-2 focus:ring-purple-500 dark:bg-surface-800 dark:border-surface-600 dark:text-surface-200"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -309,40 +309,42 @@ export default function BudgetDashboard() {
             {/* Table */}
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-gray-500 uppercase">
+                    <thead className="uppercase bg-surface-50 dark:bg-surface-700/50 text-surface-500 dark:text-surface-400">
                         <tr>
-                            <th className="py-3 px-6 text-right">סטטוס</th>
-                            <th className="py-3 px-6 text-right">הוצאה</th>
-                            <th className="py-3 px-6 text-right">ספק</th>
-                            <th className="py-3 px-6 text-right">קטגוריה</th>
-                            <th className="py-3 px-6 text-right">סכום</th>
-                            <th className="py-3 px-6 text-center">פעולות</th>
+                            <th className="px-6 py-3 text-right">סטטוס</th>
+                            <th className="px-6 py-3 text-right">הוצאה</th>
+                            <th className="px-6 py-3 text-right">ספק</th>
+                            <th className="px-6 py-3 text-right">קטגוריה</th>
+                            <th className="px-6 py-3 text-right">סכום</th>
+                            <th className="px-6 py-3 text-center">פעולות</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-surface-50 dark:divide-surface-700">
                         {filteredItems.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className="text-center py-8 text-gray-400">לא נמצאו הוצאות</td>
+                                <td colSpan="6" className="py-8 text-center text-surface-400">לא נמצאו הוצאות</td>
                             </tr>
                         ) : filteredItems.map(item => (
-                            <tr key={item.id} className="hover:bg-purple-50/20 transition">
-                                <td className="py-3 px-6">
+                            <tr key={item.id} className="transition hover:bg-purple-50/50 dark:hover:bg-surface-700/50">
+                                <td className="px-6 py-3">
                                     <button 
                                         onClick={() => togglePaid(item)}
                                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition w-fit ${
-                                            item.is_paid ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            item.is_paid 
+                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' 
+                                            : 'bg-surface-100 text-surface-600 hover:bg-surface-200 dark:bg-surface-700 dark:text-surface-300 dark:hover:bg-surface-600'
                                         }`}
                                     >
                                         {item.is_paid ? <CheckCircle size={12} /> : <Circle size={12} />}
                                         {item.is_paid ? 'שולם' : 'לא שולם'}
                                     </button>
                                 </td>
-                                <td className="py-3 px-6 font-medium text-gray-800">{item.title}</td>
-                                <td className="py-3 px-6 text-gray-500">{item.vendor || '-'}</td>
-                                <td className="py-3 px-6"><span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">{item.category}</span></td>
-                                <td className="py-3 px-6 font-bold text-gray-700">₪{item.amount.toLocaleString()}</td>
-                                <td className="py-3 px-6 text-center">
-                                    <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-red-500 transition p-1">
+                                <td className="px-6 py-3 font-medium text-surface-800 dark:text-surface-100">{item.title}</td>
+                                <td className="px-6 py-3 text-surface-500 dark:text-surface-400">{item.vendor || '-'}</td>
+                                <td className="px-6 py-3"><span className="px-2 py-1 text-xs rounded bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300">{item.category}</span></td>
+                                <td className="px-6 py-3 font-bold text-surface-700 dark:text-surface-200">₪{item.amount.toLocaleString()}</td>
+                                <td className="px-6 py-3 text-center">
+                                    <button onClick={() => handleDelete(item.id)} className="p-1 transition text-surface-400 hover:text-red-500">
                                         <Trash2 size={16} />
                                     </button>
                                 </td>
@@ -356,36 +358,36 @@ export default function BudgetDashboard() {
 
       {/* --- Add Item Modal --- */}
       {isModalOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up">
-                  <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                      <h3 className="font-bold text-lg text-gray-800">הוספת הוצאה חדשה</h3>
-                      <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-gray-200 rounded-full"><X size={20} className="text-gray-500" /></button>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+              <div className="w-full max-w-lg overflow-hidden bg-white shadow-2xl dark:bg-surface-800 rounded-2xl animate-fade-in-up">
+                  <div className="flex items-center justify-between p-5 border-b border-surface-100 dark:border-surface-700 bg-surface-50 dark:bg-surface-700">
+                      <h3 className="text-lg font-bold text-surface-800 dark:text-surface-100">הוספת הוצאה חדשה</h3>
+                      <button onClick={() => setIsModalOpen(false)} className="p-1 rounded-full hover:bg-surface-200 dark:hover:bg-surface-600"><X size={20} className="text-surface-500 dark:text-surface-400" /></button>
                   </div>
                   
                   <form onSubmit={handleAddItem} className="p-6 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                           <div>
-                              <label className="text-xs font-medium text-gray-500 mb-1 block">שם ההוצאה *</label>
-                              <input required type="text" className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm"
+                              <label className="block mb-1 text-xs font-medium text-surface-500 dark:text-surface-400">שם ההוצאה *</label>
+                              <input required type="text" className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm bg-white border-surface-200 dark:bg-surface-900 dark:border-surface-600 dark:text-surface-100"
                                   value={newItem.title} onChange={e => setNewItem({...newItem, title: e.target.value})} placeholder="למשל: צלם מגנטים" />
                           </div>
                           <div>
-                              <label className="text-xs font-medium text-gray-500 mb-1 block">ספק (אופציונלי)</label>
-                              <input type="text" className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm"
+                              <label className="block mb-1 text-xs font-medium text-surface-500 dark:text-surface-400">ספק (אופציונלי)</label>
+                              <input type="text" className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm bg-white border-surface-200 dark:bg-surface-900 dark:border-surface-600 dark:text-surface-100"
                                   value={newItem.vendor} onChange={e => setNewItem({...newItem, vendor: e.target.value})} placeholder="שם העסק" />
                           </div>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4">
                           <div>
-                              <label className="text-xs font-medium text-gray-500 mb-1 block">סכום (₪) *</label>
-                              <input required type="number" min="0" className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm"
+                              <label className="block mb-1 text-xs font-medium text-surface-500 dark:text-surface-400">סכום (₪) *</label>
+                              <input required type="number" min="0" className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm bg-white border-surface-200 dark:bg-surface-900 dark:border-surface-600 dark:text-surface-100"
                                   value={newItem.amount} onChange={e => setNewItem({...newItem, amount: e.target.value})} />
                           </div>
                           <div>
-                              <label className="text-xs font-medium text-gray-500 mb-1 block">קטגוריה</label>
-                              <select className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm"
+                              <label className="block mb-1 text-xs font-medium text-surface-500 dark:text-surface-400">קטגוריה</label>
+                              <select className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm bg-white border-surface-200 dark:bg-surface-900 dark:border-surface-600 dark:text-surface-100"
                                   value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
                                   {['אולם וקייטרינג', 'צילום', 'מוזיקה', 'ביגוד וטיפוח', 'עיצוב', 'מתנות', 'טקסים', 'כללי', 'אחר'].map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
@@ -393,12 +395,12 @@ export default function BudgetDashboard() {
                       </div>
 
                       <div>
-                          <label className="text-xs font-medium text-gray-500 mb-1 block">הערות</label>
-                          <textarea className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm" rows="2"
+                          <label className="block mb-1 text-xs font-medium text-surface-500 dark:text-surface-400">הערות</label>
+                          <textarea className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm bg-white border-surface-200 dark:bg-surface-900 dark:border-surface-600 dark:text-surface-100" rows="2"
                               value={newItem.notes} onChange={e => setNewItem({...newItem, notes: e.target.value})} placeholder="פרטים נוספים..." />
                       </div>
 
-                      <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2.5 rounded-xl transition mt-2">
+                      <button type="submit" className="w-full py-2.5 mt-2 font-medium text-white transition bg-purple-600 rounded-xl hover:bg-purple-700">
                           שמור הוצאה
                       </button>
                   </form>

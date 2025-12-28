@@ -28,26 +28,29 @@ const Countdown = ({ targetDate, title }) => {
   if (!targetDate || Object.keys(timeLeft).length === 0) return null;
 
   const TimeBox = ({ value, label }) => (
-    <div className="flex flex-col items-center bg-white/20 backdrop-blur-md rounded-xl p-3 min-w-[80px] border border-white/30 shadow-sm">
+    <div className="flex flex-col items-center p-3 border shadow-sm bg-white/20 backdrop-blur-md rounded-xl min-w-[80px] border-white/30">
       <span className="text-3xl font-bold text-white drop-shadow-sm">
         {String(value).padStart(2, '0')}
       </span>
-      <span className="text-xs text-white/90 font-medium">{label}</span>
+      <span className="text-xs font-medium text-white/90">{label}</span>
     </div>
   );
 
   return (
-    <div className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-3xl p-8 shadow-xl text-white relative overflow-hidden mb-10">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -mr-16 -mt-16"></div>
-      <div className="absolute bottom-0 left-0 w-48 h-48 bg-pink-400 opacity-20 rounded-full blur-3xl -ml-10 -mb-10"></div>
+    // השינוי העיקרי: הגרדיאנט נהיה עמוק וכהה יותר במצב לילה (dark:from-violet-900)
+    <div className="relative w-full p-8 mb-10 overflow-hidden text-white transition-all duration-300 shadow-xl rounded-3xl bg-gradient-to-r from-violet-600 to-fuchsia-600 dark:from-violet-900 dark:to-fuchsia-900 shadow-violet-200 dark:shadow-none">
       
-      <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+      {/* אלמנטים דקורטיביים ברקע */}
+      <div className="absolute top-0 right-0 -mr-16 -mt-16 bg-white rounded-full w-64 h-64 opacity-5 blur-3xl"></div>
+      <div className="absolute bottom-0 left-0 -ml-10 -mb-10 bg-pink-400 rounded-full w-48 h-48 opacity-20 blur-3xl"></div>
+      
+      <div className="relative z-10 flex flex-col items-center justify-between gap-8 md:flex-row">
         <div className="text-center md:text-right">
-          <div className="inline-block bg-white/20 px-3 py-1 rounded-full text-xs font-bold mb-2 backdrop-blur-sm border border-white/20">
+          <div className="inline-block px-3 py-1 mb-2 text-xs font-bold border rounded-full bg-white/20 backdrop-blur-sm border-white/20">
             האירוע הקרוב
           </div>
-          <h3 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-2">{title} 💍</h3>
-          <p className="text-pink-100 text-lg flex items-center gap-2 justify-center md:justify-start">
+          <h3 className="mb-2 text-3xl font-extrabold tracking-tight md:text-4xl text-white drop-shadow-md">{title} 💍</h3>
+          <p className="flex items-center justify-center gap-2 text-lg md:justify-start text-pink-100">
             📅 {new Date(targetDate).toLocaleDateString('he-IL')}
           </p>
         </div>
