@@ -13,7 +13,7 @@ const Settings = ({ currentUser, onUpdateUser }) => {
   const [activeTab, setActiveTab] = useState('notifications'); // 'notifications' | 'password'
   const navigate = useNavigate();
 
-  // עדכון התצוגה אם המשתמש הראשי משתנה
+  // עדכון התצוגה אם המשתמש הראשי משתנה (למשל, דרך הסוקט)
   useEffect(() => {
     if (currentUser?.settings?.notification_days !== undefined) {
       setDays(currentUser.settings.notification_days);
@@ -26,6 +26,7 @@ const Settings = ({ currentUser, onUpdateUser }) => {
         notificationDays: days
       });
       
+      // עדכון מיידי של המשתמש באפליקציה (אופטימי)
       if (onUpdateUser) {
           onUpdateUser(res.data);
       }
@@ -74,7 +75,7 @@ const Settings = ({ currentUser, onUpdateUser }) => {
   const inputClass = "w-full p-3 border rounded-xl outline-none transition duration-200 bg-surface-50 border-surface-200 focus:ring-2 focus:ring-purple-500 dark:bg-surface-700 dark:border-surface-600 dark:text-white";
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-6 transition-colors duration-300 font-sans bg-surface-50 dark:bg-surface-900" dir="rtl">
+    <div className="flex items-center justify-center min-h-screen p-6 font-sans transition-colors duration-300 bg-surface-50 dark:bg-surface-900" dir="rtl">
       <div className="w-full max-w-md p-8 bg-white border shadow-lg dark:bg-surface-800 rounded-2xl border-surface-100 dark:border-surface-700">
         
         <button onClick={() => navigate('/')} className="flex items-center mb-6 transition text-surface-500 dark:text-surface-400 hover:text-purple-600 dark:hover:text-purple-400">

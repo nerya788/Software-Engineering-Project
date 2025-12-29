@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import Calendar from 'react-calendar';
@@ -25,6 +25,9 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // Ref ל-Socket כדי לא ליצור חיבורים כפולים
+  const socketRef = useRef(null);
+
   // בדיקה שהמשתמש קיים
   useEffect(() => {
     if (!currentUser) {
@@ -39,24 +42,15 @@ const Dashboard = ({ currentUser, onLogout }) => {
   }, [currentUser]);
 
   const fetchData = async () => {
-    if (!currentUser?.id) {
-      console.warn('⚠️ אין currentUser.id - לא ניתן לטעון נתונים');
-      return;
-    }
+    if (!currentUser?.id) return;
     
     try {
-      console.log('📥 טוען נתונים עבור משתמש:', currentUser.id);
+      // console.log('📥 טוען נתונים...');
       const [eventsRes, tasksRes, notifRes] = await Promise.all([
         axios.get(`${API_URL}/api/events?userId=${currentUser.id}`),
         axios.get(`${API_URL}/api/tasks?userId=${currentUser.id}`),
         axios.get(`${API_URL}/api/notifications?userId=${currentUser.id}`)
       ]);
-      
-      console.log('✅ נתונים נטענו:', {
-        events: eventsRes.data.length,
-        tasks: tasksRes.data.length,
-        notifications: notifRes.data.length
-      });
       
       setEvents(eventsRes.data || []);
       setTasks(tasksRes.data || []);
@@ -64,61 +58,58 @@ const Dashboard = ({ currentUser, onLogout }) => {
       setLoading(false);
     } catch (err) {
       console.error('❌ שגיאה בטעינת נתונים:', err);
-      console.error('❌ פרטי השגיאה:', err.response?.data || err.message);
       setLoading(false);
       setMessage('שגיאה בטעינת הנתונים. נסה לרענן את הדף.');
       setTimeout(() => setMessage(''), 5000);
     }
   };
 
-  // טעינת נתונים מיד כשהמשתמש מתחבר
-  useEffect(() => {
-    if (currentUser?.id) {
-      console.log('🔄 טוען נתונים עבור משתמש:', currentUser.id);
-      setLoading(true);
-      fetchData();
-    } else {
-      console.warn('⚠️ לא ניתן לטעון נתונים - אין currentUser.id');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
-
+  // אתחול Socket וטעינה ראשונית
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    // חיבור ל-Socket
-    const socket = io(API_URL);
+    setLoading(true);
+    fetchData();
+
+    // 1. יצירת חיבור Socket
+    if (!socketRef.current) {
+        socketRef.current = io(API_URL, { transports: ['websocket'] });
+    }
+    const socket = socketRef.current;
+
+    // 2. הרשמה לחדר
     socket.emit('register_user', currentUser.id);
-    console.log('🔌 התחבר ל-Socket.io עבור משתמש:', currentUser.id);
+    console.log('🔌 מחובר ל-Socket עבור משתמש:', currentUser.id);
 
-    // 1. האזנה להתראות חדשות
-    socket.on('new_notification', (newNotif) => {
-      console.log('🔔 התקבלה התראה חדשה בזמן אמת!', newNotif);
-      setNotifications((prev) => [newNotif, ...prev]);
-      setMessage(`התראה חדשה: ${newNotif.message}`);
-      setTimeout(() => setMessage(''), 4000);
-    });
-
-    // 2. האזנה לשינויי נתונים (סנכרון בין חלונות)
-    socket.on('data_changed', () => {
-      console.log('🔄 התקבל אות לרענון נתונים - מעדכן מיד');
-      fetchData(); // טוען מחדש את האירועים והמשימות מיד
-    });
-
-    // 3. רענון אוטומטי כל 30 שניות (גיבוי למקרה ש-Socket לא עובד)
-    const refreshInterval = setInterval(() => {
-      console.log('🔄 רענון אוטומטי של נתונים');
-      fetchData();
-    }, 30000);
-
-    return () => {
-      clearInterval(refreshInterval);
-      socket.disconnect();
+    // 3. האזנה להתראות חדשות
+    const handleNewNotification = (newNotif) => {
+        console.log('🔔 התראה חדשה:', newNotif);
+        setNotifications((prev) => [newNotif, ...prev]);
+        setMessage(`🔔 ${newNotif.message}`);
+        setTimeout(() => setMessage(''), 4000);
     };
 
+    // 4. האזנה לשינויי נתונים (Observer)
+    const handleDataChange = () => {
+        console.log('🔄 התקבל עדכון נתונים - מרענן דשבורד...');
+        fetchData(); 
+    };
+
+    socket.on('new_notification', handleNewNotification);
+    socket.on('data_changed', handleDataChange);
+
+    // 5. רענון גיבוי כל 30 שניות
+    const refreshInterval = setInterval(fetchData, 30000);
+
+    return () => {
+        socket.off('new_notification', handleNewNotification);
+        socket.off('data_changed', handleDataChange);
+        clearInterval(refreshInterval);
+        // אופציונלי: socket.disconnect();
+    };
   }, [currentUser?.id]);
 
-  // מיון משימות ואירועים לפי תאריך
+  // מיון משימות ואירועים
   const sortedTasks = [...tasks].sort((a, b) => {
     if (!a.due_date && !b.due_date) return 0;
     if (!a.due_date) return 1;
@@ -126,18 +117,15 @@ const Dashboard = ({ currentUser, onLogout }) => {
     return new Date(a.due_date) - new Date(b.due_date);
   });
 
-  const sortedEvents = [...events].sort((a, b) => {
-    return new Date(a.event_date) - new Date(b.event_date);
-  });
+  const sortedEvents = [...events].sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
 
-  const nextEvent = sortedEvents
-    .filter(e => new Date(e.event_date) > new Date().setHours(0,0,0,0))[0];
+  const nextEvent = sortedEvents.filter(e => new Date(e.event_date) > new Date().setHours(0,0,0,0))[0];
 
   const handleCreateEvent = async (e) => {
     e.preventDefault();
     try {
       await axios.post(`${API_URL}/api/events`, { userId: currentUser.id, ...eventForm });
-      await fetchData();
+      // הסוקט יעדכן את כולם
       setEventForm({ title: '', eventDate: '', description: '' });
       setMessage('האירוע נוצר בהצלחה! 🎉');
       setTimeout(() => setMessage(''), 3000);
@@ -151,7 +139,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
     e.preventDefault();
     try {
       await axios.post(`${API_URL}/api/tasks`, { userId: currentUser.id, ...taskForm });
-      await fetchData();
+      // הסוקט יעדכן את כולם
       setTaskForm({ title: '', dueDate: '', isDone: false, category: 'general', assigneeName: '', assigneeEmail: '' });
       setMessage('המשימה נוצרה בהצלחה! ✅');
       setTimeout(() => setMessage(''), 3000);
@@ -164,7 +152,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const updateTask = async (taskId, updates) => {
     try {
       await axios.put(`${API_URL}/api/tasks/${taskId}`, updates);
-      await fetchData();
+      // הסוקט יעדכן
     } catch (err) {
       console.error('Error updating task', err);
       setMessage('שגיאה בעדכון משימה');
@@ -172,6 +160,8 @@ const Dashboard = ({ currentUser, onLogout }) => {
   };
 
   const toggleTaskDone = (task) => {
+    // עדכון אופטימי מקומי לתגובה מהירה
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_done: !task.is_done, status: !task.is_done ? 'done' : 'todo' } : t));
     updateTask(task.id, { isDone: !task.is_done, status: !task.is_done ? 'done' : 'todo' });
   };
 
@@ -180,7 +170,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
       await axios.put(`${API_URL}/api/notifications/${id}/read`);
       setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (err) {
-      console.error('Error marking notification as read', err);
+      console.error('Error marking notification', err);
     }
   };
 
@@ -645,12 +635,12 @@ const Dashboard = ({ currentUser, onLogout }) => {
                  <div>
                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תאריך</label>
                    <input type="date" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
-                    value={eventForm.eventDate} onChange={e => setEventForm({...eventForm, eventDate: e.target.value})} required />
+                   value={eventForm.eventDate} onChange={e => setEventForm({...eventForm, eventDate: e.target.value})} required />
                  </div>
                  <div>
                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תיאור (אופציונלי)</label>
                    <input type="text" placeholder="פרטים..." className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
-                    value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} />
+                   value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} />
                  </div>
               </div>
               <button className="w-full py-3.5 mt-2 font-bold text-white transition bg-pink-500 rounded-xl hover:bg-pink-600 shadow-lg shadow-pink-200 dark:shadow-none">
