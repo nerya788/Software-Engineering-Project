@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import io from 'socket.io-client';
 import './App.css';
-import { API_URL } from './config';
 
 // רכיבים
 import Auth from './components/Auth';
@@ -31,30 +29,12 @@ function App() {
 
   const handleLogin = (userData) => {
     setCurrentUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData)); // ✅ שמירה בזיכרון
+    // אופציונלי: כאן תוכל לשמור ל-localStorage אם תרצה שההתחברות תשמר בריענון
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('user'); // ✅ מחיקה מהזיכרון
   };
-
-  // האזנה לשינויים בפרטי המשתמש דרך הסוקט
-  useEffect(() => {
-    if (currentUser?.id) {
-      const socket = io(API_URL, { transports: ['websocket'] });
-      socket.emit('register_user', currentUser.id);
-
-      socket.on('user_updated', (updatedUser) => {
-        setCurrentUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser)); // עדכון גם בזיכרון
-      });
-
-      return () => {
-        socket.disconnect();
-      };
-    }
-  }, [currentUser?.id]);
 
   return (
     <div className="min-h-screen transition-colors duration-300 bg-surface-50 dark:bg-surface-900 text-surface-900 dark:text-surface-50">
@@ -70,13 +50,11 @@ function App() {
             ) : (
               <>
                 <Route path="/" element={<Dashboard currentUser={currentUser} onLogout={handleLogout} />} />
-                
-                {/* ✅ הוספנו את הנתיב לספקים */}
-                <Route path="/vendors" element={<VendorList />} />
-                
-                <Route path="/events/:eventId/guests" element={<GuestList currentUser={currentUser} />} />
+                <Route path="/events/:eventId/guests" element={<GuestList />} />
                 <Route path="/events/:eventId/budget" element={<BudgetDashboard currentUser={currentUser} />} />
                 <Route path="/events/:eventId/edit" element={<EditEventForm currentUser={currentUser} />} />
+                
+                {/* onUpdateUser מאפשר עדכון מהיר, הסוקט מטפל בסנכרון בין חלונות */}
                 <Route path="/settings" element={<Settings currentUser={currentUser} onUpdateUser={setCurrentUser} />} />
                 
                 <Route path="*" element={<Navigate to="/" />} />

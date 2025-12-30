@@ -107,6 +107,10 @@ function buildMailTransport() {
 
 const mailer = buildMailTransport();
 
+// 🔒 משתנה לשמירת הנעילות בזיכרון (לא ב-Database)
+// מבנה: { eventId: { socketId, userId, userEmail } }
+const activeLocks = {};
+
 // Socket.io - טיפול בחיבורים
 io.on('connection', (socket) => {
   console.log(`🔌 User connected: ${socket.id}`);
@@ -117,8 +121,46 @@ io.on('connection', (socket) => {
     console.log(`   --> User ${userId} joined room`);
   });
 
+  // --- מנגנון נעילה (Locking Mechanism) ---
+
+  // 1. בקשת נעילה כשנכנסים לדף העריכה
+  socket.on('request_edit_lock', ({ eventId, userId, email }) => {
+    const currentLock = activeLocks[eventId];
+
+    // אם יש נעילה, ומי שנעל הוא לא המשתמש הנוכחי
+    if (currentLock && currentLock.userId !== userId) {
+      // דחיית בקשה: האירוע נעול
+      socket.emit('lock_status', { 
+        isLocked: true, 
+        lockedBy: currentLock.email 
+      });
+    } else {
+      // אישור בקשה: נועלים את האירוע
+      activeLocks[eventId] = { socketId: socket.id, userId, email };
+      socket.emit('lock_status', { isLocked: false });
+    }
+  });
+
+  // 2. שחרור נעילה יזום (כשיוצאים מהדף)
+  socket.on('release_edit_lock', (eventId) => {
+    const currentLock = activeLocks[eventId];
+    // משחררים רק אם ה-Socket הזה הוא זה שנעל
+    if (currentLock && currentLock.socketId === socket.id) {
+      delete activeLocks[eventId];
+    }
+  });
+
+  // 3. שחרור אוטומטי בעת ניתוק (סגירת טאב / נפילת אינטרנט)
   socket.on('disconnect', () => {
     console.log(`❌ User disconnected: ${socket.id}`);
+    
+    // מעבר על כל הנעילות ומחיקת אלו ששייכות ל-Socket שהתנתק
+    Object.keys(activeLocks).forEach((eventId) => {
+      if (activeLocks[eventId].socketId === socket.id) {
+        console.log(`🔓 Auto-unlocking event ${eventId} due to disconnect`);
+        delete activeLocks[eventId];
+      }
+    });
   });
 });
 
@@ -298,6 +340,7 @@ app.post('/api/users/login', async (req, res) => {
   }
 });
 
+// עדכון הגדרות - הוספתי שידור (emit) לסנכרון חלונות
 app.put('/api/users/:id/settings', async (req, res) => {
   const { id } = req.params;
   const { notificationDays } = req.body;
@@ -308,6 +351,10 @@ app.put('/api/users/:id/settings', async (req, res) => {
       { new: true }
     );
     if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    // 🔥 Observer Trigger: עדכון כל החלונות של המשתמש
+    io.to(id).emit('user_updated', toPublic(user));
+    
     res.json(toPublic(user));
   } catch (err) {
     res.status(500).json({ message: 'Error updating settings' });
@@ -370,6 +417,7 @@ app.post('/api/events', async (req, res) => {
       is_main_event: shouldBeMain
     });
 
+    // Observer: עדכון לקוח
     io.to(userId).emit('data_changed');
     res.status(201).json(toPublic(ev));
   } catch (err) {
@@ -438,6 +486,9 @@ app.delete('/api/events/:id', async (req, res) => {
     const deleted = await Event.findByIdAndDelete(id);
     if (!deleted) return res.status(404).json({ message: 'Event not found' });
     
+    // מחיקת נעילה אם קיימת
+    if (activeLocks[id]) delete activeLocks[id];
+
     // שידור לסנכרון חלונות
     io.to(String(deleted.user_id)).emit('data_changed');
     res.json({ message: 'Event deleted successfully', id });
@@ -558,6 +609,13 @@ app.post('/api/guests', async (req, res) => {
       dietary_notes: dietaryNotes,
       rsvp_status: rsvpStatus || 'pending'
     });
+
+    // Observer: עדכון לקוח
+    const event = await Event.findById(eventId);
+    if (event) {
+        io.to(String(event.user_id)).emit('data_changed');
+    }
+
     res.status(201).json(toPublic(newGuest));
   } catch (err) {
     res.status(500).json({ message: 'Error adding guest' });
@@ -580,6 +638,13 @@ app.put('/api/guests/:id', async (req, res) => {
 
     const updated = await Guest.findByIdAndUpdate(id, updateData, { new: true });
     if (!updated) return res.status(404).json({ message: 'Guest not found' });
+
+    // Observer: עדכון לקוח
+    const event = await Event.findById(updated.event_id);
+    if (event) {
+        io.to(String(event.user_id)).emit('data_changed');
+    }
+
     res.json(toPublic(updated));
   } catch (err) {
     res.status(500).json({ message: 'Error updating guest' });
@@ -589,8 +654,17 @@ app.put('/api/guests/:id', async (req, res) => {
 app.delete('/api/guests/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const deleted = await Guest.findByIdAndDelete(id);
-    if (!deleted) return res.status(404).json({ message: 'Guest not found' });
+    const guestToDelete = await Guest.findById(id);
+    if (!guestToDelete) return res.status(404).json({ message: 'Guest not found' });
+
+    await Guest.findByIdAndDelete(id);
+
+    // Observer: עדכון לקוח
+    const event = await Event.findById(guestToDelete.event_id);
+    if (event) {
+        io.to(String(event.user_id)).emit('data_changed');
+    }
+
     res.json({ message: 'Guest deleted successfully', id });
   } catch (err) {
     res.status(500).json({ message: 'Error deleting guest', error: err.message });

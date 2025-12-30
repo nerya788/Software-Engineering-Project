@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useParams, Link } from 'react-router-dom';
+import io from 'socket.io-client';
 import { API_URL } from '../config';
 
 // --- אייקונים ---
@@ -16,9 +17,10 @@ const Icons = {
   Upload: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
 };
 
-const GuestList = () => {
+const GuestList = ({ currentUser }) => {
   const { eventId } = useParams();
   const fileInputRef = useRef(null);
+  const socketRef = useRef(null);
   
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,29 @@ const GuestList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRsvp, setFilterRsvp] = useState('all');
 
-  useEffect(() => { fetchGuests(); }, [eventId]);
+  // טעינה וחיבור ל-Socket
+  useEffect(() => { 
+    fetchGuests(); 
+
+    if (currentUser?.id) {
+        if (!socketRef.current) {
+            socketRef.current = io(API_URL, { transports: ['websocket'] });
+        }
+        const socket = socketRef.current;
+        socket.emit('register_user', currentUser.id);
+
+        const handleDataChange = () => {
+            console.log('🔄 Guest list updated from server!');
+            fetchGuests();
+        };
+
+        socket.on('data_changed', handleDataChange);
+
+        return () => {
+            socket.off('data_changed', handleDataChange);
+        };
+    }
+  }, [eventId, currentUser]);
 
   const fetchGuests = async () => {
     try {
@@ -58,28 +82,23 @@ const GuestList = () => {
           setLoading(true);
           await axios.post(`${API_URL}/api/events/${eventId}/guests/import`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
           alert('הקובץ נטען בהצלחה!');
-          fetchGuests();
+          // הסוקט יעדכן
       } catch (err) { alert('שגיאה בטעינת הקובץ'); setLoading(false); }
       e.target.value = '';
   };
 
-  // --- עדכון כמות מוזמנים מהיר ---
   const updateAmount = async (guestId, newAmount) => {
       const amount = parseInt(newAmount, 10);
-      if (!amount || amount < 1) return; // מניעת מספרים לא חוקיים
+      if (!amount || amount < 1) return;
       
       try {
-          // עדכון אופטימי (מקומי) כדי שהממשק ירגיש מהיר
           setGuests(prev => prev.map(g => g.id === guestId ? { ...g, amount_invited: amount } : g));
-          
-          // שליחה לשרת
           await axios.put(`${API_URL}/api/guests/${guestId}`, { amountInvited: amount });
       } catch (err) {
           console.error("שגיאה בעדכון כמות");
-          fetchGuests(); // אם נכשל, נחזיר למצב האמיתי מהשרת
+          fetchGuests();
       }
   };
-  // ------------------------------
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -94,8 +113,7 @@ const GuestList = () => {
     e.preventDefault();
     if (!newGuest.fullName) return;
     try {
-      const response = await axios.post(`${API_URL}/api/guests`, { eventId: eventId, ...newGuest });
-      setGuests([response.data, ...guests]);
+      await axios.post(`${API_URL}/api/guests`, { eventId: eventId, ...newGuest });
       setNewGuest({ fullName: '', phone: '', side: 'friend', amountInvited: 1, mealOption: 'standard', dietaryNotes: '' });
       setDuplicateWarning('');
     } catch (err) { alert("שגיאה בהוספה"); }
@@ -105,15 +123,15 @@ const GuestList = () => {
     if (!window.confirm("למחוק את האורח לצמיתות?")) return;
     try {
       await axios.delete(`${API_URL}/api/guests/${guestId}`);
-      setGuests(guests.filter(g => g.id !== guestId));
     } catch (err) { alert("שגיאה במחיקה"); }
   };
 
   const handleStatusChange = async (guestId, newStatus) => {
     try {
-      const response = await axios.put(`${API_URL}/api/guests/${guestId}`, { rsvpStatus: newStatus });
-      setGuests(guests.map(g => g.id === guestId ? response.data : g));
-    } catch (err) { console.error("שגיאה בעדכון סטטוס"); }
+      // אופטימי
+      setGuests(guests.map(g => g.id === guestId ? { ...g, rsvp_status: newStatus } : g));
+      await axios.put(`${API_URL}/api/guests/${guestId}`, { rsvpStatus: newStatus });
+    } catch (err) { console.error("שגיאה בעדכון סטטוס"); fetchGuests(); }
   };
 
   const startEditing = (guest) => {
@@ -123,8 +141,7 @@ const GuestList = () => {
 
   const saveEdit = async (guestId) => {
     try {
-      const response = await axios.put(`${API_URL}/api/guests/${guestId}`, { ...editFormData });
-      setGuests(guests.map(g => g.id === guestId ? response.data : g));
+      await axios.put(`${API_URL}/api/guests/${guestId}`, { ...editFormData });
       setEditingId(null);
     } catch (err) { alert("שגיאה בשמירה"); }
   };
@@ -156,7 +173,7 @@ const GuestList = () => {
 
   const getMealLabel = (meal) => ({ standard: 'רגיל', veggie: 'צמחוני', vegan: 'טבעוני', kids: 'ילדים' }[meal] || 'רגיל');
 
-  // סגנונות שהמרנו מ-CSS רגיל ל-Tailwind כדי לתמוך ב-Dark Mode
+  // CSS Classes extracted for cleaner JSX
   const inputClass = "w-full p-3 border rounded-xl outline-none transition duration-200 text-sm bg-white border-surface-200 focus:ring-2 focus:ring-purple-500 dark:bg-surface-700 dark:border-surface-600 dark:text-white dark:placeholder-surface-400";
   const tableInputClass = "w-full p-2 border rounded-lg outline-none transition duration-200 text-xs bg-white border-surface-200 focus:ring-2 focus:ring-purple-500 dark:bg-surface-700 dark:border-surface-600 dark:text-white";
   const thClass = "px-4 py-3 text-xs font-bold tracking-wider text-right uppercase bg-surface-50 text-surface-500 dark:bg-surface-700/50 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700";
@@ -202,18 +219,15 @@ const GuestList = () => {
           </div>
           <form onSubmit={handleAddGuest} className="grid items-center grid-cols-1 gap-3 md:grid-cols-12">
             
-            {/* שם מלא */}
             <div className="relative md:col-span-2">
               <input type="text" name="fullName" className={inputClass} placeholder="שם מלא *" value={newGuest.fullName} onChange={handleInputChange} required />
               {duplicateWarning && <p className="absolute mt-1 text-xs font-medium text-rose-500">⚠️ {duplicateWarning}</p>}
             </div>
             
-            {/* טלפון */}
             <div className="md:col-span-2">
               <input type="tel" name="phone" className={inputClass} placeholder="טלפון" value={newGuest.phone} onChange={handleInputChange} />
             </div>
             
-            {/* כמות */}
             <div className="md:col-span-1">
                <input 
                  type="number" 
@@ -226,26 +240,22 @@ const GuestList = () => {
                />
             </div>
 
-            {/* צד */}
             <div className="md:col-span-2">
               <select name="side" className={`${inputClass} cursor-pointer`} value={newGuest.side} onChange={handleInputChange}>
                 <option value="friend">חברים</option><option value="bride">צד כלה</option><option value="groom">צד חתן</option><option value="family">משפחה</option>
               </select>
             </div>
             
-            {/* מנה */}
             <div className="md:col-span-2">
               <select name="mealOption" className={`${inputClass} cursor-pointer`} value={newGuest.mealOption} onChange={handleInputChange}>
                 <option value="standard">מנה רגילה</option><option value="veggie">צמחוני</option><option value="vegan">טבעוני</option><option value="kids">ילדים</option>
               </select>
             </div>
             
-            {/* הערות */}
             <div className="md:col-span-2">
               <input type="text" name="dietaryNotes" className={inputClass} placeholder="הערות" value={newGuest.dietaryNotes} onChange={handleInputChange} />
             </div>
             
-            {/* כפתור */}
             <div className="md:col-span-1">
               <button type="submit" className="flex items-center justify-center w-full bg-purple-600 rounded-xl h-[46px] text-white hover:bg-purple-700 transition shadow-md active:scale-95 dark:shadow-none" title="הוסף לרשימה">
                 <Icons.UserAdd />
