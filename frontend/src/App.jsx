@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import io from 'socket.io-client'; // ✅ מהקובץ של החבר
 import './App.css';
+import { API_URL } from './config'; // ✅ מהקובץ של החבר
 
 // רכיבים
 import Auth from './components/Auth';
@@ -10,12 +12,12 @@ import GuestList from './components/GuestList';
 import EditEventForm from './components/EditEventForm';
 import Settings from './components/Settings';
 import BudgetDashboard from './components/BudgetDashboard';
-import VendorList from './components/VendorList'; // ✅ הוספנו את זה
+import VendorList from './components/VendorList'; // ✅ מהקובץ שלך (ניהול ספקים)
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
-  // ✅ טעינת משתמש מהזיכרון בטעינת האפליקציה (מונע התנתקות ברענון)
+  // ✅ 1. טעינת משתמש מהזיכרון (מהקובץ שלך) - מונע התנתקות ברענון
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
@@ -27,17 +29,44 @@ function App() {
     }
   }, []);
 
+  // ✅ 2. הנדלרים עם שמירה לזיכרון (מהקובץ שלך)
   const handleLogin = (userData) => {
     setCurrentUser(userData);
-    // אופציונלי: כאן תוכל לשמור ל-localStorage אם תרצה שההתחברות תשמר בריענון
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem('user');
   };
+
+  // ✅ 3. Observer Logic עם סוקט (מהקובץ של החבר) - סנכרון הגדרות בזמן אמת
+  useEffect(() => {
+    if (currentUser?.id) {
+      console.log('🔄 App: Connecting global socket for user sync...');
+      const socket = io(API_URL, { transports: ['websocket'] });
+
+      // הרשמה לחדר של המשתמש
+      socket.emit('register_user', currentUser.id);
+
+      // האזנה לאירוע שהוספנו בשרת: user_updated
+      socket.on('user_updated', (updatedUser) => {
+        console.log('✨ App: User data updated from server:', updatedUser);
+        
+        // עדכון ה-State וגם ה-LocalStorage כדי שהסנכרון יישמר
+        setCurrentUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [currentUser?.id]);
 
   return (
     <div className="min-h-screen transition-colors duration-300 bg-surface-50 dark:bg-surface-900 text-surface-900 dark:text-surface-50">
+      
       <div className="fixed top-4 left-4 z-50">
         <ThemeToggle />
       </div>
@@ -45,17 +74,24 @@ function App() {
       <Router>
         <div className="container mx-auto px-4 py-8">
           <Routes>
+            {/* נתיבים למשתמש לא מחובר */}
             {!currentUser ? (
               <Route path="*" element={<Auth onLogin={handleLogin} />} />
             ) : (
+              /* נתיבים למשתמש מחובר */
               <>
                 <Route path="/" element={<Dashboard currentUser={currentUser} onLogout={handleLogout} />} />
-                <Route path="/events/:eventId/guests" element={<GuestList />} />
+                
+                {/* ✅ הוספנו את הנתיב לספקים (מהקובץ שלך) */}
+                <Route path="/vendors" element={<VendorList />} />
+                
+                {/* ✅ שימוש בגרסה של החבר שמעבירה currentUser למוזמנים */}
+                <Route path="/events/:eventId/guests" element={<GuestList currentUser={currentUser} />} />
+                
                 <Route path="/events/:eventId/budget" element={<BudgetDashboard currentUser={currentUser} />} />
                 <Route path="/events/:eventId/edit" element={<EditEventForm currentUser={currentUser} />} />
                 
-                {/* onUpdateUser מאפשר עדכון מהיר, הסוקט מטפל בסנכרון בין חלונות */}
-                <Route path="/settings" element={<Settings currentUser={currentUser} onUpdateUser={setCurrentUser} />} />
+                <Route path="/settings" element={<Settings currentUser={currentUser} onUpdateUser={handleLogin} />} />
                 
                 <Route path="*" element={<Navigate to="/" />} />
               </>
@@ -67,4 +103,4 @@ function App() {
   );
 }
 
-export default App;
+export default App; 

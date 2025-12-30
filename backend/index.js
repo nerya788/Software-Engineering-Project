@@ -950,10 +950,9 @@ app.post('/api/events/:eventId/guests/import', upload.single('file'), async (req
         res.status(500).json({ message: 'שגיאה בעיבוד הקובץ', error: err.message });
     }
 }); 
+// --- Vendor Routes (With Socket.io Observers) ---
 
-// --- Vendor Routes (Fixed) ---
-
-// 1. קבלת כל הספקים (דורש userId ב-Query)
+// 1. קבלת כל הספקים
 app.get('/api/vendors', async (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ message: 'userId query param is required' });
@@ -966,35 +965,42 @@ app.get('/api/vendors', async (req, res) => {
   }
 });
 
-// 2. הוספת ספק חדש (דורש userId ב-Body)
+// 2. הוספת ספק חדש + שידור עדכון
 app.post('/api/vendors', async (req, res) => {
-  // ודא שה-userId נשלח מהלקוח
   const { userId, name, category } = req.body;
   
   if (!userId) return res.status(400).json({ message: 'userId is required' });
   if (!name || !category) return res.status(400).json({ message: 'name and category are required' });
 
   try {
-    const newVendor = new Vendor(req.body); // userId כבר בפנים
+    const newVendor = new Vendor(req.body); 
     await newVendor.save();
+
+    // 🔥 Observer: עדכון כל המחוברים לחשבון הזה
+    io.to(userId).emit('data_changed');
+
     res.status(201).json(newVendor);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
 });
 
-// 3. מחיקת ספק
+// 3. מחיקת ספק + שידור עדכון
 app.delete('/api/vendors/:id', async (req, res) => {
   try {
     const deleted = await Vendor.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Vendor not found" });
+    
+    // 🔥 Observer: עדכון כל המחוברים
+    io.to(String(deleted.userId)).emit('data_changed');
+
     res.json({ message: 'Vendor deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// 4. עדכון דירוג או פרטים
+// 4. עדכון פרטים + שידור עדכון
 app.put('/api/vendors/:id', async (req, res) => {
   try {
     const updatedVendor = await Vendor.findByIdAndUpdate(
@@ -1002,11 +1008,17 @@ app.put('/api/vendors/:id', async (req, res) => {
       req.body,
       { new: true }
     );
+    
+    if (updatedVendor) {
+      // 🔥 Observer: עדכון כל המחוברים
+      io.to(String(updatedVendor.userId)).emit('data_changed');
+    }
+
     res.json(updatedVendor);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
-});
+}); 
 
 // --- Server Start ---
 

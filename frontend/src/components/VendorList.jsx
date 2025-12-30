@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // הוספנו useRef
 import axios from 'axios';
+import io from 'socket.io-client'; // הוספנו את הסוקט
 import { API_URL } from '../config';
 import { Star, Phone, Mail, Plus, Trash2, X, AlertCircle } from 'lucide-react';
 
@@ -8,6 +9,9 @@ const VendorList = () => {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState('');
+  
+  // Ref לסוקט כדי למנוע חיבורים כפולים
+  const socketRef = useRef(null);
   
   // State לטופס הוספה
   const [newVendor, setNewVendor] = useState({ 
@@ -28,7 +32,7 @@ const VendorList = () => {
     { id: 'Other', label: 'שונות', color: 'text-gray-600 bg-gray-50 dark:bg-gray-800 dark:text-gray-300' },
   ];
 
-  // --- תיקון: פונקציה לקבלת ה-ID של המשתמש המחובר ---
+  // פונקציה לקבלת ה-ID של המשתמש המחובר
   const getUserId = () => {
     try {
       const userStr = localStorage.getItem('user');
@@ -40,17 +44,16 @@ const VendorList = () => {
     }
   };
 
-  useEffect(() => {
-    fetchVendors();
-  }, []);
-
+  // פונקציית הטעינה
   const fetchVendors = async () => {
     const userId = getUserId();
-    if (!userId) return; 
+    if (!userId) {
+      setLoading(false); // אם אין משתמש, מפסיקים טעינה
+      return; 
+    }
 
     try {
-      setLoading(true);
-      // שינוי: שליחת userId ב-URL (Query Param) במקום Header
+      // setLoading(true); // הערה: ביטלתי את הטעינה כאן כדי למנוע הבהוב בעדכון אוטומטי
       const res = await axios.get(`${API_URL}/api/vendors?userId=${userId}`);
       setVendors(res.data);
     } catch (err) {
@@ -60,6 +63,43 @@ const VendorList = () => {
       setLoading(false);
     }
   };
+
+  // טעינה ראשונית (רגילה)
+  useEffect(() => {
+    setLoading(true); // טעינה רק בהתחלה
+    fetchVendors();
+  }, []);
+
+  // --- 🔥 Observer Logic: חיבור לסוקט ---
+  useEffect(() => {
+    const userId = getUserId();
+    if (!userId) return;
+
+    // 1. התחברות (רק אם עדיין לא מחובר)
+    if (!socketRef.current) {
+      socketRef.current = io(API_URL, { transports: ['websocket'] });
+    }
+    const socket = socketRef.current;
+
+    // 2. הרשמה לחדר של המשתמש
+    socket.emit('register_user', userId);
+
+    // 3. האזנה לשינויים
+    const handleDataChange = () => {
+      console.log('🔄 Vendors updated via socket');
+      fetchVendors(); // רענון הרשימה כשמשהו משתנה
+    };
+
+    socket.on('data_changed', handleDataChange);
+
+    // 4. ניקוי ביציאה
+    return () => {
+      socket.off('data_changed', handleDataChange);
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+  // ----------------------------------------
 
   const handleAddVendor = async (e) => {
     e.preventDefault();
@@ -77,11 +117,11 @@ const VendorList = () => {
     }
 
     try {
-      // שינוי: הוספת userId לגוף הבקשה
       await axios.post(`${API_URL}/api/vendors`, { ...newVendor, userId });
       
-      // רענון ואיפוס
+      // הסוקט כבר יעשה את הרענון, אבל ליתר ביטחון נשאיר את זה
       await fetchVendors();
+      
       setIsFormOpen(false);
       setNewVendor({ name: '', category: '', phone: '', email: '', priceEstimate: '', notes: '' });
     } catch (err) {
