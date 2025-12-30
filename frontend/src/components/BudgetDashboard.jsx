@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -10,11 +10,13 @@ import {
   Wallet, TrendingUp, AlertCircle, X, Edit2, 
   Filter, Download, Search
 } from 'lucide-react';
+import io from 'socket.io-client'; // 🔥 ייבוא Socket
 import { API_URL } from '../config';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#ef4444', '#94a3b8'];
 
-export default function BudgetDashboard() {
+// 🔥 הוספנו את currentUser ל-props
+export default function BudgetDashboard({ currentUser }) {
   const { eventId } = useParams();
   const navigate = useNavigate();
   
@@ -35,9 +37,37 @@ export default function BudgetDashboard() {
   // Form State
   const [newItem, setNewItem] = useState({ title: '', vendor: '', amount: '', category: 'כללי', notes: '' });
 
+  // Socket Ref
+  const socketRef = useRef(null);
+
+  // טעינה ראשונית וחיבור ל-Socket
   useEffect(() => {
     fetchBudget();
-  }, [eventId]);
+
+    if (currentUser?.id) {
+        // יצירת חיבור Socket
+        if (!socketRef.current) {
+            socketRef.current = io(API_URL, { transports: ['websocket'] });
+        }
+        const socket = socketRef.current;
+
+        // רישום לחדר
+        socket.emit('register_user', currentUser.id);
+
+        // האזנה לשינויים
+        const handleDataChange = () => {
+            console.log('🔄 Budget updated form server!');
+            fetchBudget();
+        };
+
+        socket.on('data_changed', handleDataChange);
+
+        return () => {
+            socket.off('data_changed', handleDataChange);
+            // לא מנתקים כדי לא לשבור חיבורים אחרים, אלא אם יוצאים מהאפליקציה
+        };
+    }
+  }, [eventId, currentUser]);
 
   // סינון אוטומטי כשהנתונים או הפילטרים משתנים
   useEffect(() => {
@@ -55,7 +85,7 @@ export default function BudgetDashboard() {
     try {
       const res = await axios.get(`${API_URL}/api/events/${eventId}/budget`);
       setItems(res.data.items);
-      setFilteredItems(res.data.items);
+      // setFilteredItems יתעדכן דרך ה-useEffect של הסינון
       setBudgetLimit(res.data.budgetLimit);
       setTempLimit(res.data.budgetLimit);
       setSummary(res.data.summary);
@@ -70,6 +100,7 @@ export default function BudgetDashboard() {
   const updateBudgetLimit = async () => {
     try {
         await axios.put(`${API_URL}/api/events/${eventId}/budget-limit`, { totalBudget: tempLimit });
+        // עדכון אופטימי (הסוקט יסנכרן את שאר החלונות)
         setBudgetLimit(tempLimit);
         setIsEditingLimit(false);
         fetchBudget(); 
@@ -93,7 +124,7 @@ export default function BudgetDashboard() {
       });
       setIsModalOpen(false);
       setNewItem({ title: '', vendor: '', amount: '', category: 'כללי', notes: '' });
-      fetchBudget();
+      // הסוקט יבצע fetchBudget אוטומטית
     } catch (err) {
       console.error(err);
       alert('שגיאה בהוספת הוצאה');
@@ -102,10 +133,14 @@ export default function BudgetDashboard() {
 
   const togglePaid = async (item) => {
     try {
+      // עדכון אופטימי מקומי לתחושת מיידיות
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, is_paid: !i.is_paid } : i));
+      
       await axios.put(`${API_URL}/api/budget/${item.id}`, { is_paid: !item.is_paid });
-      fetchBudget();
+      // הסוקט יוודא סנכרון מלא
     } catch (err) {
       console.error(err);
+      fetchBudget(); // שחזור במקרה שגיאה
     }
   };
 
@@ -113,7 +148,7 @@ export default function BudgetDashboard() {
     if(!window.confirm('למחוק הוצאה זו?')) return;
     try {
       await axios.delete(`${API_URL}/api/budget/${id}`);
-      fetchBudget();
+      // הסוקט יבצע fetchBudget
     } catch (err) {
       console.error(err);
     }
@@ -276,7 +311,7 @@ export default function BudgetDashboard() {
             </div>
         </div>
 
-        {/* --- List Section with Filters --- */}
+        {/* --- List Section --- */}
         <div className="overflow-hidden bg-white border shadow-sm dark:bg-surface-800 rounded-2xl border-surface-100 dark:border-surface-700">
             
             {/* Filters Bar */}
