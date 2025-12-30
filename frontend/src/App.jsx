@@ -14,6 +14,10 @@ import Settings from './components/Settings';
 import BudgetDashboard from './components/BudgetDashboard';
 import VendorList from './components/VendorList'; // ✅ מהקובץ שלך (ניהול ספקים)
 
+// >>> ADDED: Tips page
+import Tips from './components/Tips';
+// <<< ADDED: Tips page
+
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -84,6 +88,10 @@ function App() {
                 
                 {/* ✅ הוספנו את הנתיב לספקים (מהקובץ שלך) */}
                 <Route path="/vendors" element={<VendorList />} />
+
+                {/* >>> ADDED: route לטיפים */}
+                <Route path="/tips" element={<Tips />} />
+                {/* <<< ADDED: route לטיפים */}
                 
                 {/* ✅ שימוש בגרסה של החבר שמעבירה currentUser למוזמנים */}
                 <Route path="/events/:eventId/guests" element={<GuestList currentUser={currentUser} />} />
@@ -103,4 +111,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;
