@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-
+const Vendor = require('./models/Vendor');
 const { connectMongo } = require('./db');
 const User = require('./models/User');
 const Event = require('./models/Event');
@@ -876,6 +876,63 @@ app.post('/api/events/:eventId/guests/import', upload.single('file'), async (req
         res.status(500).json({ message: 'שגיאה בעיבוד הקובץ', error: err.message });
     }
 }); 
+
+// --- Vendor Routes (Fixed) ---
+
+// 1. קבלת כל הספקים (דורש userId ב-Query)
+app.get('/api/vendors', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ message: 'userId query param is required' });
+  
+  try {
+    const vendors = await Vendor.find({ userId }).sort({ createdAt: -1 });
+    res.json(vendors);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 2. הוספת ספק חדש (דורש userId ב-Body)
+app.post('/api/vendors', async (req, res) => {
+  // ודא שה-userId נשלח מהלקוח
+  const { userId, name, category } = req.body;
+  
+  if (!userId) return res.status(400).json({ message: 'userId is required' });
+  if (!name || !category) return res.status(400).json({ message: 'name and category are required' });
+
+  try {
+    const newVendor = new Vendor(req.body); // userId כבר בפנים
+    await newVendor.save();
+    res.status(201).json(newVendor);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// 3. מחיקת ספק
+app.delete('/api/vendors/:id', async (req, res) => {
+  try {
+    const deleted = await Vendor.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Vendor not found" });
+    res.json({ message: 'Vendor deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 4. עדכון דירוג או פרטים
+app.put('/api/vendors/:id', async (req, res) => {
+  try {
+    const updatedVendor = await Vendor.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    res.json(updatedVendor);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
 
 // --- Server Start ---
 
