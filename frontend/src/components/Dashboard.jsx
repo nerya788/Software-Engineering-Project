@@ -25,6 +25,33 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // >>> ADDED: Wedding Tips favorites (localStorage only)
+  const [favoriteTips, setFavoriteTips] = useState([]);
+
+  const loadFavoriteTips = () => {
+    try {
+      const raw = localStorage.getItem('wedding_favorite_tips');
+      const ids = raw ? JSON.parse(raw) : [];
+      setFavoriteTips(Array.isArray(ids) ? ids : []);
+    } catch (e) {
+      setFavoriteTips([]);
+    }
+  };
+
+  useEffect(() => {
+    loadFavoriteTips();
+
+    const onFavUpdate = () => loadFavoriteTips();
+    window.addEventListener('tips_favorites_updated', onFavUpdate);
+    window.addEventListener('storage', onFavUpdate);
+
+    return () => {
+      window.removeEventListener('tips_favorites_updated', onFavUpdate);
+      window.removeEventListener('storage', onFavUpdate);
+    };
+  }, []);
+  // <<< ADDED
+
   // Ref ל-Socket כדי לא ליצור חיבורים כפולים
   const socketRef = useRef(null);
 
@@ -575,7 +602,8 @@ const Dashboard = ({ currentUser, onLogout }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* כרטיסייה לניהול ספקים */}
             <Link to="/vendors" className="relative overflow-hidden group bg-white dark:bg-surface-800 p-6 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 hover:shadow-xl hover:-translate-y-1 transition duration-300">
-              {/* פס צבע קישוטי בצד */}
+              {/* פס צבע קישוטי בצ \
+ פס צבע קישוטי בצד */}
               <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-blue-500 to-cyan-400"></div>
               
               <div className="flex items-center justify-between mb-4 pl-4">
@@ -594,6 +622,35 @@ const Dashboard = ({ currentUser, onLogout }) => {
                 </p>
               </div>
             </Link>
+
+            {/* >>> ADDED: כרטיסייה לטיפים לחתונה */}
+            <Link to="/tips" className="relative overflow-hidden group bg-white dark:bg-surface-800 p-6 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 hover:shadow-xl hover:-translate-y-1 transition duration-300">
+              <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-purple-600 to-pink-500"></div>
+              
+              <div className="flex items-center justify-between mb-4 pl-4">
+                <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-2xl text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
+                  {/* אייקון נורה (טיפים) */}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 18h6" />
+                    <path d="M10 22h4" />
+                    <path d="M12 2a7 7 0 0 0-4 12c.5.5 1 1.5 1 2h6c0-.5.5-1.5 1-2a7 7 0 0 0-4-12z" />
+                  </svg>
+                </div>
+                <span className="text-3xl opacity-20">💡</span>
+              </div>
+
+              <div className="pl-2">
+                <h3 className="text-xl font-bold text-surface-800 dark:text-surface-100 mb-2">Wedding Tips</h3>
+                <p className="text-sm text-surface-500 dark:text-surface-400 leading-relaxed">
+                  מאגר טיפים לפי קטגוריות + חיפוש ומיון. ניתן לסמן ⭐ מועדפים (נשמר במחשב שלך).
+                </p>
+
+                <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 text-xs font-bold dark:bg-purple-900/20 dark:text-purple-300">
+                  ⭐ מועדפים: {favoriteTips.length}
+                </div>
+              </div>
+            </Link>
+            {/* <<< ADDED */}
           </div>
         </section>
 
