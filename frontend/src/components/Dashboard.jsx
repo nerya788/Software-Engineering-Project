@@ -576,6 +576,37 @@ const Dashboard = ({ currentUser, onLogout }) => {
           )}
         </section>
 
+        <section className="mb-12">
+          <div className="flex items-center gap-4 mb-6">
+            <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">ניהול שוטף</h2>
+            <div className="flex-1 h-px bg-surface-200 dark:bg-surface-700"></div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* כרטיסייה לניהול ספקים */}
+            <Link to="/vendors" className="relative overflow-hidden group bg-white dark:bg-surface-800 p-6 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 hover:shadow-xl hover:-translate-y-1 transition duration-300">
+              {/* פס צבע קישוטי בצד */}
+              <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-blue-500 to-cyan-400"></div>
+              
+              <div className="flex items-center justify-between mb-4 pl-4">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                  {/* אייקון ספקים (Handshake) */}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.05l1.86 1.86a1.98 1.98 0 0 1 0 2.82l-.71.71"/><path d="m11 17a1 1 0 0 1-1.41 0L5 12.41a1 1 0 0 1 0-1.41l8.29-8.29a.6.6 0 0 1 .85 0l3.75 3.75a.6.6 0 0 1 0 .85L11 14.14"/></svg>
+                </div>
+                <span className="text-3xl opacity-20">📋</span>
+              </div>
+              
+              <div className="pl-2">
+                <h3 className="text-xl font-bold text-surface-800 dark:text-surface-100 mb-2">ניהול ספקים ונותני שירות</h3>
+                <p className="text-sm text-surface-500 dark:text-surface-400 leading-relaxed">
+                  מרכז את כל אנשי המקצוע במקום אחד: צלמים, קייטרינג, ואולם. 
+                  כולל שמירת הצעות מחיר ודירוג אישי.
+                </p>
+              </div>
+            </Link>
+          </div>
+        </section>
+
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           
           <div className="p-8 bg-white border shadow-sm dark:bg-surface-800 rounded-3xl border-surface-100 dark:border-surface-700">
