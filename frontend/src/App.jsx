@@ -18,6 +18,10 @@ import VendorList from './components/VendorList'; // ✅ מהקובץ שלך (נ
 import Tips from './components/Tips';
 // <<< ADDED: Tips page
 
+// >>> ADDED: Public RSVP page
+import RsvpPage from './components/RsvpPage';
+// <<< ADDED: Public RSVP page
+
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -78,6 +82,10 @@ function App() {
       <Router>
         <div className="container mx-auto px-4 py-8">
           <Routes>
+
+            {/* ✅ RSVP ציבורי - עובד גם בלי משתמש מחובר */}
+            <Route path="/rsvp/e/:eventId" element={<RsvpPage />} />
+
             {/* נתיבים למשתמש לא מחובר */}
             {!currentUser ? (
               <Route path="*" element={<Auth onLogin={handleLogin} />} />

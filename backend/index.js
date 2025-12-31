@@ -17,6 +17,10 @@ const Notification = require('./models/Notification');
 const BudgetItem = require('./models/BudgetItem'); 
 const XLSX = require('xlsx'); 
 
+// (NEW) - for serving frontend build on Render
+const path = require('path'); // (NEW)
+const fs = require('fs');     // (NEW)
+
 const app = express();
 // כתובות מותרות (גם לוקאלי וגם הייצור ב-Render)
 const allowedOrigins = [
@@ -62,6 +66,61 @@ function toPublic(doc) {
   delete o.__v;
   delete o.password_hash;
   return o;
+}
+
+/* ================================
+   RSVP HELPERS (NEW)
+   ================================ */
+
+function normalizePhone(raw) {
+  if (!raw) return '';
+  let p = String(raw).trim();
+  p = p.replace(/[^\d+]/g, ''); // keep digits and +
+  // Israel: 05X... -> +9725X...
+  if (p.startsWith('0')) p = '+972' + p.slice(1);
+  if (p.startsWith('972')) p = '+' + p;
+  return p;
+}
+
+function phoneVariants(raw) {
+  const v = new Set();
+  const a = String(raw || '').trim();
+  if (!a) return [];
+  v.add(a);
+  v.add(a.replace(/[^\d+]/g, ''));
+  const n = normalizePhone(a);
+  if (n) v.add(n);
+
+  // also try raw without + for robustness
+  if (n.startsWith('+')) v.add(n.slice(1));
+  return Array.from(v).filter(Boolean);
+}
+
+function mapMealInputToDb(meal) {
+  const m = String(meal || '').trim().toLowerCase();
+  if (m === 'מיוחדת' || m === 'special') return 'special';
+  if (m === 'רגילה' || m === 'regular' || m === 'standard') return 'standard';
+  return m || 'standard';
+}
+
+function mapSideInputToDb(side) {
+  const s = String(side || '').trim().toLowerCase();
+  if (s === 'צד חתן' || s === 'חתן' || s === 'groom') return 'groom';
+  if (s === 'צד כלה' || s === 'כלה' || s === 'bride') return 'bride';
+  if (s === 'משפחה' || s === 'family') return 'family';
+  if (s === 'חברים' || s === 'friend' || s === 'friends') return 'friend';
+  return 'friend';
+}
+
+function mapStatusInputToDb(status) {
+  const s = String(status || '').trim().toLowerCase();
+  if (s === 'מגיע' || s === 'כן' || s === 'attending') return 'attending';
+  if (s === 'לא מגיע' || s === 'לא' || s === 'declined') return 'declined';
+  return 'pending';
+}
+
+function getPublicBaseUrl() {
+  return (process.env.PUBLIC_BASE_URL || 'https://wedding-planner-app-x373.onrender.com').replace(/\/+$/, '');
 }
 
 function buildMailTransport() {
@@ -579,7 +638,7 @@ app.put('/api/tasks/:id', async (req, res) => {
     io.to(String(updated.user_id)).emit('data_changed');
     res.json(toPublic(updated));
   } catch (err) {
-    res.status(500).json({ message: 'Error updating task', error: err.message });
+    res.status(500).json({ message: 'Error updating task' });
   }
 });
 
@@ -668,6 +727,150 @@ app.delete('/api/guests/:id', async (req, res) => {
     res.json({ message: 'Guest deleted successfully', id });
   } catch (err) {
     res.status(500).json({ message: 'Error deleting guest', error: err.message });
+  }
+});
+
+/* ================================
+   RSVP ROUTES (NEW)
+   ================================ */
+
+// Lookup guest by eventId + phone
+app.post('/api/rsvp/lookup', async (req, res) => {
+  try {
+    const { eventId, phone } = req.body || {};
+    if (!eventId || !phone) return res.status(400).json({ message: 'eventId and phone are required' });
+
+    const variants = phoneVariants(phone);
+    const guest = await Guest.findOne({ event_id: eventId, phone: { $in: variants } });
+    if (!guest) return res.json({ found: false });
+
+    return res.json({
+      found: true,
+      type: guest.is_unknown ? 'unknown' : 'known',
+      guest: toPublic(guest)
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Error in lookup', error: err.message });
+  }
+});
+
+// Submit RSVP (updates known guest, or creates unknown guest)
+app.post('/api/rsvp/submit', async (req, res) => {
+  try {
+    const { eventId, phone, fullName, status, count, side, mealOption } = req.body || {};
+    if (!eventId || !phone) return res.status(400).json({ message: 'eventId and phone are required' });
+
+    const variants = phoneVariants(phone);
+    const normalized = normalizePhone(phone);
+
+    const finalStatus = mapStatusInputToDb(status);
+    const finalSide = mapSideInputToDb(side);
+    const finalMeal = mapMealInputToDb(mealOption);
+
+    const amountInvited = Number(count || 1);
+    const safeAmount = Number.isFinite(amountInvited) && amountInvited > 0 ? amountInvited : 1;
+
+    let guest = await Guest.findOne({ event_id: eventId, phone: { $in: variants } });
+
+    if (guest) {
+      guest.rsvp_status = finalStatus;
+      guest.amount_invited = safeAmount;
+      guest.side = finalSide;
+      guest.meal_option = finalMeal;
+      // normalize stored phone (לא חובה, אבל עוזר לעתיד)
+      if (normalized) guest.phone = normalized;
+      await guest.save();
+    } else {
+      const name = (String(fullName || '').trim() || 'אורח לא מזוהה');
+
+      guest = await Guest.create({
+        event_id: eventId,
+        full_name: name,
+        phone: normalized || String(phone),
+        side: finalSide,
+        amount_invited: safeAmount,
+        meal_option: finalMeal,
+        rsvp_status: finalStatus,
+        is_unknown: true
+      });
+    }
+
+    // Observer: עדכון לקוח
+    const event = await Event.findById(eventId);
+    if (event) {
+      io.to(String(event.user_id)).emit('data_changed');
+    }
+
+    return res.json({ ok: true, guest: toPublic(guest) });
+  } catch (err) {
+    return res.status(500).json({ message: 'Error in submit', error: err.message });
+  }
+});
+
+/* ================================
+   SEND RSVP MESSAGES (NEW)
+   ================================ */
+
+// mode: "all" | "notResponded"
+app.post('/api/messages/send', async (req, res) => {
+  try {
+    const { eventId, mode } = req.body || {};
+    if (!eventId) return res.status(400).json({ message: 'eventId is required' });
+
+    const filter = { event_id: eventId };
+    if (mode === 'notResponded') {
+      filter.rsvp_status = 'pending';
+    }
+
+    const guests = await Guest.find(filter).lean();
+    const base = getPublicBaseUrl();
+    const link = `${base}/rsvp/e/${eventId}`;
+
+    const hasTwilio = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM;
+
+    let twilioClient = null;
+    if (hasTwilio) {
+      try {
+        const twilio = require('twilio');
+        twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      } catch (e) {
+        twilioClient = null;
+      }
+    }
+
+    const results = { sent: 0, skipped: 0, failed: 0, failures: [] };
+
+    for (const g of guests) {
+      const p = normalizePhone(g.phone);
+      if (!p) {
+        results.skipped++;
+        continue;
+      }
+
+      const text = `היי ${g.full_name || ''} 👋\nנשמח לאישור הגעה:\n${link}\n\n(יש לבחור מגיע/לא מגיע, כמות, צד, ומנה רגילה/מיוחדת)`;
+
+      if (!twilioClient) {
+        console.log('📩 [DEV SEND] to:', p, 'text:', text);
+        results.sent++;
+        continue;
+      }
+
+      try {
+        await twilioClient.messages.create({
+          from: process.env.TWILIO_SMS_FROM,
+          to: p,
+          body: text
+        });
+        results.sent++;
+      } catch (err) {
+        results.failed++;
+        results.failures.push({ phone: p, error: err.message });
+      }
+    }
+
+    return res.json({ ok: true, link, mode: mode || 'all', ...results });
+  } catch (err) {
+    return res.status(500).json({ message: 'Error sending messages', error: err.message });
   }
 });
 
@@ -804,7 +1007,6 @@ app.put('/api/budget/:id', async (req, res) => {
 const multer = require('multer');
 const csv = require('csv-parser');
 const { Parser } = require('json2csv');
-const fs = require('fs');
 const upload = multer({ dest: 'uploads/' }); // תיקייה זמנית לקבצים
 
 // --- Guest Import/Export Routes ---
@@ -821,7 +1023,7 @@ app.get('/api/events/:eventId/guests/export', async (req, res) => {
     // מילונים להמרה לעברית
     const sideMap = { 'groom': 'צד חתן', 'bride': 'צד כלה', 'family': 'משפחה', 'friend': 'חברים' };
     const statusMap = { 'attending': 'מגיע', 'declined': 'לא מגיע', 'pending': 'טרם ענה', 'maybe': 'אולי' };
-    const mealMap = { 'standard': 'רגיל', 'veggie': 'צמחוני', 'vegan': 'טבעוני', 'kids': 'מנת ילדים' };
+    const mealMap = { 'standard': 'רגיל', 'special': 'מיוחדת', 'veggie': 'צמחוני', 'vegan': 'טבעוני', 'kids': 'מנת ילדים' };
 
     // עיצוב הנתונים לפורמט של אקסל
     const excelData = guests.map(g => ({
@@ -942,14 +1144,12 @@ app.post('/api/events/:eventId/guests/import', upload.single('file'), async (req
             res.json({ message: 'לא נמצאו רשומות תקינות בקובץ', count: 0 });
         }
 
-        // ניקוי
-        fs.unlinkSync(req.file.path);
-
     } catch (err) {
         console.error('❌ Import Error:', err);
         res.status(500).json({ message: 'שגיאה בעיבוד הקובץ', error: err.message });
     }
 }); 
+
 // --- Vendor Routes (With Socket.io Observers) ---
 
 // 1. קבלת כל הספקים
@@ -1019,6 +1219,24 @@ app.put('/api/vendors/:id', async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 }); 
+
+/* ================================
+   SERVE FRONTEND BUILD (NEW)
+   ================================ */
+// This enables deep-links like /rsvp/e/:eventId on Render (React Router).
+// It will not break local dev because it only runs if dist exists.
+
+const distPath = path.join(__dirname, '..', 'frontend', 'dist'); // (NEW)
+const distIndex = path.join(distPath, 'index.html');             // (NEW)
+
+if (fs.existsSync(distPath) && fs.existsSync(distIndex)) {       // (NEW)
+  app.use(express.static(distPath));                             // (NEW)
+
+  // fallback for SPA routes
+  app.get('*', (req, res) => {                                   // (NEW)
+    res.sendFile(distIndex);
+  });
+}
 
 // --- Server Start ---
 

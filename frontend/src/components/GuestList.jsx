@@ -26,6 +26,11 @@ const GuestList = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const [duplicateWarning, setDuplicateWarning] = useState('');
 
+  // >>> ADDED: send SMS state
+  const [sendingSms, setSendingSms] = useState(false);
+  const [smsResult, setSmsResult] = useState(null);
+  // <<< ADDED: send SMS state
+
   // טופס הוספה
   const [newGuest, setNewGuest] = useState({ fullName: '', phone: '', side: 'friend', amountInvited: 1, mealOption: 'standard', dietaryNotes: '' });
   
@@ -173,6 +178,23 @@ const GuestList = ({ currentUser }) => {
 
   const getMealLabel = (meal) => ({ standard: 'רגיל', veggie: 'צמחוני', vegan: 'טבעוני', kids: 'ילדים' }[meal] || 'רגיל');
 
+  // >>> ADDED: send SMS actions
+  const sendSms = async (mode) => {
+    try {
+      setSendingSms(true);
+      setSmsResult(null);
+      const res = await axios.post(`${API_URL}/api/messages/send`, { eventId, mode });
+      setSmsResult(res.data);
+      alert(`נשלח בהצלחה ✅\nSent: ${res.data.sent}\nSkipped: ${res.data.skipped}\nFailed: ${res.data.failed}`);
+    } catch (err) {
+      console.error('Error sending SMS:', err);
+      alert('שגיאה בשליחת הודעות');
+    } finally {
+      setSendingSms(false);
+    }
+  };
+  // <<< ADDED: send SMS actions
+
   // CSS Classes extracted for cleaner JSX
   const inputClass = "w-full p-3 border rounded-xl outline-none transition duration-200 text-sm bg-white border-surface-200 focus:ring-2 focus:ring-purple-500 dark:bg-surface-700 dark:border-surface-600 dark:text-white dark:placeholder-surface-400";
   const tableInputClass = "w-full p-2 border rounded-lg outline-none transition duration-200 text-xs bg-white border-surface-200 focus:ring-2 focus:ring-purple-500 dark:bg-surface-700 dark:border-surface-600 dark:text-white";
@@ -190,6 +212,26 @@ const GuestList = ({ currentUser }) => {
         </Link>
 
         <div className="flex gap-3">
+            {/* >>> ADDED: SMS buttons */}
+            <button
+              disabled={sendingSms}
+              onClick={() => sendSms('all')}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition bg-purple-600 rounded-lg shadow-sm text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              title="שליחת SMS עם קישור RSVP לכל המוזמנים"
+            >
+              📩 שלח SMS לכולם
+            </button>
+
+            <button
+              disabled={sendingSms}
+              onClick={() => sendSms('notResponded')}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition bg-white border rounded-lg shadow-sm text-surface-600 border-surface-200 hover:bg-surface-50 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-surface-800 dark:border-surface-700 dark:text-surface-300 dark:hover:bg-surface-700"
+              title="שליחת SMS רק למי שסטטוס שלו pending (טרם ענה)"
+            >
+              ⏳ שלח רק למי שלא ענה
+            </button>
+            {/* <<< ADDED: SMS buttons */}
+
             <button onClick={handleExport} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition bg-white border rounded-lg shadow-sm text-surface-600 border-surface-200 hover:bg-surface-50 dark:bg-surface-800 dark:border-surface-700 dark:text-surface-300 dark:hover:bg-surface-700">
                 <Icons.Download /> ייצוא לאקסל
             </button>
@@ -199,6 +241,28 @@ const GuestList = ({ currentUser }) => {
             <input type="file" ref={fileInputRef} className="hidden" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onChange={handleFileSelect} />
         </div>
       </div>
+
+      {/* >>> ADDED: optional result box */}
+      {smsResult && (
+        <div className="max-w-[1400px] mx-auto mb-6">
+          <div className="p-4 bg-white border rounded-xl shadow-sm border-surface-200 dark:bg-surface-800 dark:border-surface-700">
+            <div className="text-sm text-surface-700 dark:text-surface-200">
+              ✅ הודעות נשלחו. Link: <span className="font-mono text-xs">{smsResult.link}</span>
+            </div>
+            <div className="mt-2 text-xs text-surface-500 dark:text-surface-400">
+              Sent: {smsResult.sent} | Skipped: {smsResult.skipped} | Failed: {smsResult.failed}
+            </div>
+            {smsResult.failures && smsResult.failures.length > 0 && (
+              <div className="mt-3 text-xs text-rose-600 dark:text-rose-300">
+                חלק נכשלו (לדוגמה): {smsResult.failures.slice(0, 3).map((f, i) => (
+                  <span key={i} className="ml-2 font-mono">{f.phone}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* <<< ADDED: optional result box */}
 
       <div className="max-w-[1400px] mx-auto bg-white dark:bg-surface-800 shadow-xl shadow-surface-200/60 dark:shadow-none rounded-2xl overflow-hidden border border-surface-200 dark:border-surface-700">
         
