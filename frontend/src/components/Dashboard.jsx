@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { Bell, Settings, Wallet } from 'lucide-react';
+import { Bell, Settings, Wallet, ListTodo, CalendarDays } from 'lucide-react'; // הוספתי אייקונים חדשים
 import io from 'socket.io-client';
 import Countdown from './Countdown.jsx';
 import { API_URL } from '../config';
@@ -12,6 +12,10 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const categories = ['general', 'vendors', 'budget', 'design', 'guests', 'logistics'];
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
+  
+  // --- ניהול הטאבים (חדש) ---
+  const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' or 'events'
+  
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [date, setDate] = useState(new Date());
@@ -25,7 +29,10 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // >>> ADDED: Wedding Tips favorites (localStorage only)
+  // בדיקה האם המשתמש הוא שותף
+  const isPartner = currentUser?.isPartner || currentUser?.is_partner;
+
+  // Wedding Tips favorites (localStorage only)
   const [favoriteTips, setFavoriteTips] = useState([]);
 
   const loadFavoriteTips = () => {
@@ -50,7 +57,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
       window.removeEventListener('storage', onFavUpdate);
     };
   }, []);
-  // <<< ADDED
 
   // Ref ל-Socket כדי לא ליצור חיבורים כפולים
   const socketRef = useRef(null);
@@ -72,7 +78,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
     if (!currentUser?.id) return;
     
     try {
-      // console.log('📥 טוען נתונים...');
       const [eventsRes, tasksRes, notifRes] = await Promise.all([
         axios.get(`${API_URL}/api/events?userId=${currentUser.id}`),
         axios.get(`${API_URL}/api/tasks?userId=${currentUser.id}`),
@@ -98,17 +103,14 @@ const Dashboard = ({ currentUser, onLogout }) => {
     setLoading(true);
     fetchData();
 
-    // 1. יצירת חיבור Socket
     if (!socketRef.current) {
         socketRef.current = io(API_URL, { transports: ['websocket'] });
     }
     const socket = socketRef.current;
 
-    // 2. הרשמה לחדר
     socket.emit('register_user', currentUser.id);
     console.log('🔌 מחובר ל-Socket עבור משתמש:', currentUser.id);
 
-    // 3. האזנה להתראות חדשות
     const handleNewNotification = (newNotif) => {
         console.log('🔔 התראה חדשה:', newNotif);
         setNotifications((prev) => [newNotif, ...prev]);
@@ -116,7 +118,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
         setTimeout(() => setMessage(''), 4000);
     };
 
-    // 4. האזנה לשינויי נתונים (Observer)
     const handleDataChange = () => {
         console.log('🔄 התקבל עדכון נתונים - מרענן דשבורד...');
         fetchData(); 
@@ -125,14 +126,12 @@ const Dashboard = ({ currentUser, onLogout }) => {
     socket.on('new_notification', handleNewNotification);
     socket.on('data_changed', handleDataChange);
 
-    // 5. רענון גיבוי כל 30 שניות
     const refreshInterval = setInterval(fetchData, 30000);
 
     return () => {
         socket.off('new_notification', handleNewNotification);
         socket.off('data_changed', handleDataChange);
         clearInterval(refreshInterval);
-        // אופציונלי: socket.disconnect();
     };
   }, [currentUser?.id]);
 
@@ -152,7 +151,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
     e.preventDefault();
     try {
       await axios.post(`${API_URL}/api/events`, { userId: currentUser.id, ...eventForm });
-      // הסוקט יעדכן את כולם
       setEventForm({ title: '', eventDate: '', description: '' });
       setMessage('האירוע נוצר בהצלחה! 🎉');
       setTimeout(() => setMessage(''), 3000);
@@ -166,7 +164,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
     e.preventDefault();
     try {
       await axios.post(`${API_URL}/api/tasks`, { userId: currentUser.id, ...taskForm });
-      // הסוקט יעדכן את כולם
       setTaskForm({ title: '', dueDate: '', isDone: false, category: 'general', assigneeName: '', assigneeEmail: '' });
       setMessage('המשימה נוצרה בהצלחה! ✅');
       setTimeout(() => setMessage(''), 3000);
@@ -179,7 +176,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
   const updateTask = async (taskId, updates) => {
     try {
       await axios.put(`${API_URL}/api/tasks/${taskId}`, updates);
-      // הסוקט יעדכן
     } catch (err) {
       console.error('Error updating task', err);
       setMessage('שגיאה בעדכון משימה');
@@ -187,7 +183,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
   };
 
   const toggleTaskDone = (task) => {
-    // עדכון אופטימי מקומי לתגובה מהירה
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_done: !task.is_done, status: !task.is_done ? 'done' : 'todo' } : t));
     updateTask(task.id, { isDone: !task.is_done, status: !task.is_done ? 'done' : 'todo' });
   };
@@ -230,6 +225,11 @@ const Dashboard = ({ currentUser, onLogout }) => {
             <h1 className="text-2xl font-bold text-transparent bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text">
               Wedding Planner
             </h1>
+            {isPartner && (
+                <span className="px-2 py-0.5 text-xs font-bold text-white bg-purple-500 rounded-full">
+                    שותף
+                </span>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -293,8 +293,8 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
         <div className="grid grid-cols-1 gap-8 mb-12 lg:grid-cols-12">
           
+          {/* Calendar (Left Side) */}
           <div className="h-fit lg:col-span-4 p-6 bg-white dark:bg-surface-800 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700">
-            
             <div className="flex items-center justify-between mb-6">
               <h2 className="flex items-center gap-2 text-xl font-bold text-surface-800 dark:text-surface-100">🗓️ לוח שנה</h2>
               <div className="flex p-1 rounded-lg bg-surface-100 dark:bg-surface-700 text-sm">
@@ -312,7 +312,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
                 </button>
               </div>
             </div>
-
             <div className="ltr-calendar dark:text-surface-200"> 
               {viewMode === 'month' ? (
                 <Calendar onChange={setDate} value={date} tileContent={tileContent} locale="he-IL" className="dark:bg-surface-800 dark:text-surface-200 react-calendar-dark" />
@@ -323,25 +322,19 @@ const Dashboard = ({ currentUser, onLogout }) => {
                     const firstDay = curr.getDate() - curr.getDay(); 
                     const weekDate = new Date(curr.setDate(firstDay + i));
                     const isSelected = weekDate.toDateString() === date.toDateString();
-
                     const hasEv = sortedEvents.some(e => new Date(e.event_date).toDateString() === weekDate.toDateString());
                     const hasTask = sortedTasks.some(t => t.due_date && new Date(t.due_date).toDateString() === weekDate.toDateString());
-
                     return (
                       <div 
                         key={i} 
-                        onClick={() => setDate(weekDate)}
+                        onClick={() => setDate(weekDate)} 
                         className={`p-3 rounded-xl border cursor-pointer transition flex justify-between items-center
                           ${isSelected ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 ring-1 ring-purple-100 dark:ring-purple-900' : 'bg-surface-50 dark:bg-surface-700 border-surface-100 dark:border-surface-600 hover:bg-white dark:hover:bg-surface-600'}
                         `}
                       >
                         <div className="flex items-center gap-3">
-                           <span className={`font-bold ${isSelected ? 'text-purple-700 dark:text-purple-300' : 'text-surface-600 dark:text-surface-300'}`}>
-                             {weekDate.toLocaleDateString('he-IL', { weekday: 'long' })}
-                           </span>
-                           <span className="text-xs text-surface-400">
-                             {weekDate.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}
-                           </span>
+                           <span className={`font-bold ${isSelected ? 'text-purple-700 dark:text-purple-300' : 'text-surface-600 dark:text-surface-300'}`}>{weekDate.toLocaleDateString('he-IL', { weekday: 'long' })}</span>
+                           <span className="text-xs text-surface-400">{weekDate.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}</span>
                         </div>
                         <div className="flex gap-1">
                           {hasTask && <div className="w-2 h-2 bg-purple-500 rounded-full" title="משימה"></div>}
@@ -355,87 +348,131 @@ const Dashboard = ({ currentUser, onLogout }) => {
             </div>
           </div>
 
+          {/* Feed (Right Side) - Updated with TABS */}
           <div className="flex flex-col lg:col-span-8 p-8 bg-white dark:bg-surface-800 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 min-h-[500px]">
+            
+            {/* Header: Title + TABS + Filters */}
             <div className="flex flex-col gap-4 pb-4 mb-6 border-b border-surface-100 dark:border-surface-700">
+              
               <div className="flex items-end justify-between">
                 <div>
-                  <p className="mb-1 text-sm text-surface-500 dark:text-surface-400">משימות ואירועים עבור</p>
                   <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">
                     {date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </h2>
                 </div>
-                <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${visibleTasks.length > 0 ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' : 'bg-surface-100 dark:bg-surface-700 text-surface-500 dark:text-surface-400'}`}>
-                  {visibleTasks.length} משימות
-                </span>
+                
+                {/* --- טאבים (חדש) --- */}
+                <div className="flex p-1 bg-surface-100 dark:bg-surface-700 rounded-xl">
+                    <button 
+                        onClick={() => setActiveTab('tasks')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                            activeTab === 'tasks' 
+                            ? 'bg-white dark:bg-surface-600 text-purple-600 dark:text-purple-300 shadow-sm' 
+                            : 'text-surface-500 hover:text-surface-700 dark:text-surface-400'
+                        }`}
+                    >
+                        <ListTodo size={16} />
+                        משימות ({visibleTasks.length})
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('events')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                            activeTab === 'events' 
+                            ? 'bg-white dark:bg-surface-600 text-pink-600 dark:text-pink-300 shadow-sm' 
+                            : 'text-surface-500 hover:text-surface-700 dark:text-surface-400'
+                        }`}
+                    >
+                        <CalendarDays size={16} />
+                        אירועים ({sortedEvents.length})
+                    </button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 text-sm bg-white border rounded-xl border-surface-200 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200">
-                  <option value="all">כל הסטטוסים</option>
-                  <option value="todo">פתוחות</option>
-                  <option value="in_progress">בתהליך</option>
-                  <option value="done">הושלמו</option>
-                </select>
-                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-2 text-sm bg-white border rounded-xl border-surface-200 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200">
-                  <option value="all">כל הקטגוריות</option>
-                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
+
+              {/* Filters (Visible only in Tasks tab) */}
+              {activeTab === 'tasks' && (
+                <div className="flex flex-wrap gap-3 animate-fade-in">
+                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 text-sm bg-white border rounded-xl border-surface-200 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200">
+                        <option value="all">כל הסטטוסים</option>
+                        <option value="todo">פתוחות</option>
+                        <option value="in_progress">בתהליך</option>
+                        <option value="done">הושלמו</option>
+                    </select>
+                    <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-2 text-sm bg-white border rounded-xl border-surface-200 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200">
+                        <option value="all">כל הקטגוריות</option>
+                        {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 pr-2 space-y-3 overflow-y-auto custom-scrollbar">
-              {/* הצגת כל האירועים */}
-              {sortedEvents.length > 0 && sortedEvents.map(ev => (
-                <div key={ev.id} className="p-4 mb-3 border-r-4 border-pink-500 shadow-sm bg-gradient-to-r from-pink-50 to-white dark:from-surface-700 dark:to-surface-800 rounded-xl">
-                  <div className="flex items-start justify-between">
-                    <div>
-                        <h3 className="font-bold text-surface-800 dark:text-surface-100">{ev.title}</h3>
-                        <p className="text-sm text-surface-500 dark:text-surface-400">{ev.description || 'אין תיאור'}</p>
-                        <p className="mt-1 text-xs text-surface-400">📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}</p>
-                    </div>
-                    <Link to={`/events/${ev.id}/edit`} className="px-2 py-1 text-xs bg-white border rounded border-surface-200 dark:bg-surface-700 dark:border-surface-600 hover:bg-surface-50 dark:text-surface-200">
-                        ערוך
-                    </Link>
-                  </div>
-                </div>
-              ))}
               
-              {/* הצגת כל המשימות המסוננות */}
-              {visibleTasks.length === 0 ? (
-                sortedEvents.length === 0 && (
-                  <div className="flex flex-col items-center justify-center h-full text-surface-400">
-                    <div className="flex items-center justify-center w-16 h-16 mb-3 text-2xl rounded-full bg-surface-50 dark:bg-surface-700">☕</div>
-                    <p className="text-lg font-medium">אין משימות או אירועים</p>
-                    <p className="text-sm opacity-70">יום חופש! או שתוסיף משימה/אירוע למטה?</p>
-                  </div>
-                )
-              ) : (
-                visibleTasks.map(task => (
-                  <div key={task.id} className="flex items-center justify-between p-4 transition duration-200 border group bg-surface-50 dark:bg-surface-700/50 border-surface-100 dark:border-surface-700 rounded-2xl hover:bg-white dark:hover:bg-surface-700 hover:shadow-md hover:border-purple-100 dark:hover:border-purple-900">
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => toggleTaskDone(task)}
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${task.is_done ? 'bg-green-500 border-green-500' : 'border-surface-300 dark:border-surface-500 hover:border-purple-400'}`}
-                        title="סמן כהושלם"
-                      >
-                        {task.is_done && <span className="text-xs text-white">✓</span>}
-                      </button>
-                      <div>
-                        <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-surface-400' : 'text-surface-800 dark:text-surface-100'}`}>
-                          {task.title}
-                        </h3>
-                        <div className="flex flex-wrap gap-2 mt-1 text-xs">
-                          <span className={`px-2 py-0.5 rounded-md ${task.is_done ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : task.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
-                            {task.is_done ? 'הושלם' : task.status === 'in_progress' ? 'בתהליך' : 'פתוחה'}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-700 dark:bg-surface-600 dark:text-surface-200">קטגוריה: {task.category || 'כללי'}</span>
-                          {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">אחראי: {task.assignee_name}</span>}
-                          {task.due_date && <span className="px-2 py-0.5 rounded-md bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300">דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}</span>}
+              {/* --- תוכן הטאב: אירועים --- */}
+              {activeTab === 'events' && (
+                  <div className="space-y-3 animate-fade-in">
+                    {sortedEvents.length > 0 ? sortedEvents.map(ev => (
+                        <div key={ev.id} className="p-4 border-r-4 border-pink-500 shadow-sm bg-gradient-to-r from-pink-50 to-white dark:from-surface-700 dark:to-surface-800 rounded-xl">
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <h3 className="font-bold text-surface-800 dark:text-surface-100">{ev.title}</h3>
+                                <p className="text-sm text-surface-500 dark:text-surface-400">{ev.description || 'אין תיאור'}</p>
+                                <p className="mt-1 text-xs text-surface-400">📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}</p>
+                            </div>
+                            {!isPartner && (
+                                <Link to={`/events/${ev.id}/edit`} className="px-2 py-1 text-xs bg-white border rounded border-surface-200 dark:bg-surface-700 dark:border-surface-600 hover:bg-surface-50 dark:text-surface-200">
+                                    ערוך
+                                </Link>
+                            )}
                         </div>
-                      </div>
-                    </div>
+                        </div>
+                    )) : (
+                        <div className="py-10 text-center opacity-60">
+                            <span className="text-4xl">📅</span>
+                            <p className="mt-2 text-sm">אין אירועים להצגה</p>
+                        </div>
+                    )}
                   </div>
-                ))
               )}
+              
+              {/* --- תוכן הטאב: משימות --- */}
+              {activeTab === 'tasks' && (
+                  <div className="space-y-3 animate-fade-in">
+                    {visibleTasks.length > 0 ? visibleTasks.map(task => (
+                        <div key={task.id} className="flex items-center justify-between p-4 transition duration-200 border group bg-surface-50 dark:bg-surface-700/50 border-surface-100 dark:border-surface-700 rounded-2xl hover:bg-white dark:hover:bg-surface-700 hover:shadow-md hover:border-purple-100 dark:hover:border-purple-900">
+                            <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => toggleTaskDone(task)}
+                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${task.is_done ? 'bg-green-500 border-green-500' : 'border-surface-300 dark:border-surface-500 hover:border-purple-400'}`}
+                                title="סמן כהושלם"
+                            >
+                                {task.is_done && <span className="text-xs text-white">✓</span>}
+                            </button>
+                            <div>
+                                <h3 className={`font-semibold text-lg ${task.is_done ? 'line-through text-surface-400' : 'text-surface-800 dark:text-surface-100'}`}>
+                                {task.title}
+                                </h3>
+                                <div className="flex flex-wrap gap-2 mt-1 text-xs">
+                                <span className={`px-2 py-0.5 rounded-md ${task.is_done ? 'bg-green-100 text-green-700' : task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                    {task.is_done ? 'הושלם' : task.status === 'in_progress' ? 'בתהליך' : 'פתוחה'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-700 dark:bg-surface-600 dark:text-surface-200">קטגוריה: {task.category || 'כללי'}</span>
+                                {task.assignee_name && <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">אחראי: {task.assignee_name}</span>}
+                                {task.due_date && <span className="px-2 py-0.5 rounded-md bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300">דדליין: {new Date(task.due_date).toLocaleDateString('he-IL')}</span>}
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+                    )) : (
+                        <div className="py-10 text-center opacity-60">
+                            <span className="text-4xl">📝</span>
+                            <p className="mt-2 text-sm">
+                                {isPartner ? 'המתן למשימות מהזוג' : 'אין משימות להצגה'}
+                            </p>
+                        </div>
+                    )}
+                  </div>
+              )}
+
             </div>
           </div>
         </div>
@@ -545,198 +582,203 @@ const Dashboard = ({ currentUser, onLogout }) => {
           })()}
         </section>
 
-        <section className="mb-12">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">האירועים שלי</h2>
-            <div className="flex-1 h-px bg-surface-200 dark:bg-surface-700"></div>
-          </div>
-          
-          {loading ? <div className="py-10 text-center text-surface-500 dark:text-surface-400">טוען נתונים...</div> : sortedEvents.length === 0 ? (
-            <div className="py-10 text-center bg-white border border-dashed rounded-2xl border-surface-300 dark:bg-surface-800 dark:border-surface-600">
-              <p className="text-surface-500 dark:text-surface-400">עדיין אין אירועים. צור את האירוע הראשון שלך למטה!</p>
+        {/* >>> ADDED: הסתרת אזורי ניהול ויצירה לשותף <<< */}
+        {!isPartner && (
+        <>
+            <section className="mb-12">
+            <div className="flex items-center gap-4 mb-6">
+                <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">האירועים שלי (תצוגת ניהול)</h2>
+                <div className="flex-1 h-px bg-surface-200 dark:bg-surface-700"></div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {sortedEvents.map(ev => (
-                <div key={ev.id} className="relative overflow-hidden transition duration-300 bg-white border shadow-sm group rounded-3xl dark:bg-surface-800 border-surface-100 dark:border-surface-700 p-6 hover:shadow-xl hover:-translate-y-1">
-                  <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500"></div>
-                  <h3 className="mb-2 text-xl font-bold text-surface-800 dark:text-surface-100">{ev.title}</h3>
-                  <p className="flex items-center w-fit gap-2 px-3 py-1 mb-8 text-sm rounded-full text-surface-500 dark:text-surface-300 bg-surface-50 dark:bg-surface-700">
-                    📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}
-                  </p>
-                  
-                  <div className="grid grid-cols-1 gap-3">
-                    <Link 
-                      to={`/events/${ev.id}/guests`} 
-                      className="flex items-center justify-center w-full gap-2 py-3 font-medium text-white transition bg-gray-900 rounded-xl hover:bg-gray-800 shadow-lg shadow-gray-200 dark:shadow-none"
-                    >
-                      <span>📋</span> ניהול רשימת מוזמנים
-                    </Link>
-
-                    <Link 
-                      to={`/events/${ev.id}/budget`} 
-                      className="flex items-center justify-center w-full gap-2 py-3 font-medium text-white transition bg-emerald-500 rounded-xl hover:bg-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-none"
-                    >
-                      <Wallet size={18} /> ניהול תקציב
-                    </Link>
-
-                    <Link 
-                      to={`/events/${ev.id}/edit`} 
-                      className="flex items-center justify-center w-full gap-2 py-2 font-medium transition bg-white border rounded-xl border-surface-200 text-surface-700 hover:bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200 dark:hover:bg-surface-600"
-                    >
-                      <span>✏️</span> עריכת פרטים
-                    </Link>
-                  </div>
+            
+            {loading ? <div className="py-10 text-center text-surface-500 dark:text-surface-400">טוען נתונים...</div> : sortedEvents.length === 0 ? (
+                <div className="py-10 text-center bg-white border border-dashed rounded-2xl border-surface-300 dark:bg-surface-800 dark:border-surface-600">
+                <p className="text-surface-500 dark:text-surface-400">עדיין אין אירועים. צור את האירוע הראשון שלך למטה!</p>
                 </div>
-              ))}
+            ) : (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {sortedEvents.map(ev => (
+                    <div key={ev.id} className="relative overflow-hidden transition duration-300 bg-white border shadow-sm group rounded-3xl dark:bg-surface-800 border-surface-100 dark:border-surface-700 p-6 hover:shadow-xl hover:-translate-y-1">
+                    <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500"></div>
+                    <h3 className="mb-2 text-xl font-bold text-surface-800 dark:text-surface-100">{ev.title}</h3>
+                    <p className="flex items-center w-fit gap-2 px-3 py-1 mb-8 text-sm rounded-full text-surface-500 dark:text-surface-300 bg-surface-50 dark:bg-surface-700">
+                        📅 {new Date(ev.event_date).toLocaleDateString('he-IL')}
+                    </p>
+                    
+                    <div className="grid grid-cols-1 gap-3">
+                        <Link 
+                        to={`/events/${ev.id}/guests`} 
+                        className="flex items-center justify-center w-full gap-2 py-3 font-medium text-white transition bg-gray-900 rounded-xl hover:bg-gray-800 shadow-lg shadow-gray-200 dark:shadow-none"
+                        >
+                        <span>📋</span> ניהול רשימת מוזמנים
+                        </Link>
+
+                        <Link 
+                        to={`/events/${ev.id}/budget`} 
+                        className="flex items-center justify-center w-full gap-2 py-3 font-medium text-white transition bg-emerald-500 rounded-xl hover:bg-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-none"
+                        >
+                        <Wallet size={18} /> ניהול תקציב
+                        </Link>
+
+                        <Link 
+                        to={`/events/${ev.id}/edit`} 
+                        className="flex items-center justify-center w-full gap-2 py-2 font-medium transition bg-white border rounded-xl border-surface-200 text-surface-700 hover:bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-surface-200 dark:hover:bg-surface-600"
+                        >
+                        <span>✏️</span> עריכת פרטים
+                        </Link>
+                    </div>
+                    </div>
+                ))}
+                </div>
+            )}
+            </section>
+
+            <section className="mb-12">
+            <div className="flex items-center gap-4 mb-6">
+                <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">ניהול שוטף</h2>
+                <div className="flex-1 h-px bg-surface-200 dark:bg-surface-700"></div>
             </div>
-          )}
-        </section>
 
-        <section className="mb-12">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-2xl font-bold text-surface-800 dark:text-surface-100">ניהול שוטף</h2>
-            <div className="flex-1 h-px bg-surface-200 dark:bg-surface-700"></div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* כרטיסייה לניהול ספקים */}
-            <Link to="/vendors" className="relative overflow-hidden group bg-white dark:bg-surface-800 p-6 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 hover:shadow-xl hover:-translate-y-1 transition duration-300">
-              {/* פס צבע קישוטי בצ \
- פס צבע קישוטי בצד */}
-              <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-blue-500 to-cyan-400"></div>
-              
-              <div className="flex items-center justify-between mb-4 pl-4">
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
-                  {/* אייקון ספקים (Handshake) */}
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.05l1.86 1.86a1.98 1.98 0 0 1 0 2.82l-.71.71"/><path d="m11 17a1 1 0 0 1-1.41 0L5 12.41a1 1 0 0 1 0-1.41l8.29-8.29a.6.6 0 0 1 .85 0l3.75 3.75a.6.6 0 0 1 0 .85L11 14.14"/></svg>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* כרטיסייה לניהול ספקים */}
+                <Link to="/vendors" className="relative overflow-hidden group bg-white dark:bg-surface-800 p-6 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 hover:shadow-xl hover:-translate-y-1 transition duration-300">
+                {/* פס צבע קישוטי בצד */}
+                <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-blue-500 to-cyan-400"></div>
+                
+                <div className="flex items-center justify-between mb-4 pl-4">
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                    {/* אייקון ספקים (Handshake) */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.05l1.86 1.86a1.98 1.98 0 0 1 0 2.82l-.71.71"/><path d="m11 17a1 1 0 0 1-1.41 0L5 12.41a1 1 0 0 1 0-1.41l8.29-8.29a.6.6 0 0 1 .85 0l3.75 3.75a.6.6 0 0 1 0 .85L11 14.14"/></svg>
+                    </div>
+                    <span className="text-3xl opacity-20">📋</span>
                 </div>
-                <span className="text-3xl opacity-20">📋</span>
-              </div>
-              
-              <div className="pl-2">
-                <h3 className="text-xl font-bold text-surface-800 dark:text-surface-100 mb-2">ניהול ספקים ונותני שירות</h3>
-                <p className="text-sm text-surface-500 dark:text-surface-400 leading-relaxed">
-                  מרכז את כל אנשי המקצוע במקום אחד: צלמים, קייטרינג, ואולם. 
-                  כולל שמירת הצעות מחיר ודירוג אישי.
-                </p>
-              </div>
-            </Link>
-
-            {/* >>> ADDED: כרטיסייה לטיפים לחתונה */}
-            <Link to="/tips" className="relative overflow-hidden group bg-white dark:bg-surface-800 p-6 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 hover:shadow-xl hover:-translate-y-1 transition duration-300">
-              <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-purple-600 to-pink-500"></div>
-              
-              <div className="flex items-center justify-between mb-4 pl-4">
-                <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-2xl text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
-                  {/* אייקון נורה (טיפים) */}
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 18h6" />
-                    <path d="M10 22h4" />
-                    <path d="M12 2a7 7 0 0 0-4 12c.5.5 1 1.5 1 2h6c0-.5.5-1.5 1-2a7 7 0 0 0-4-12z" />
-                  </svg>
+                
+                <div className="pl-2">
+                    <h3 className="text-xl font-bold text-surface-800 dark:text-surface-100 mb-2">ניהול ספקים ונותני שירות</h3>
+                    <p className="text-sm text-surface-500 dark:text-surface-400 leading-relaxed">
+                    מרכז את כל אנשי המקצוע במקום אחד: צלמים, קייטרינג, ואולם. 
+                    כולל שמירת הצעות מחיר ודירוג אישי.
+                    </p>
                 </div>
-                <span className="text-3xl opacity-20">💡</span>
-              </div>
+                </Link>
 
-              <div className="pl-2">
-                <h3 className="text-xl font-bold text-surface-800 dark:text-surface-100 mb-2">Wedding Tips</h3>
-                <p className="text-sm text-surface-500 dark:text-surface-400 leading-relaxed">
-                  מאגר טיפים לפי קטגוריות + חיפוש ומיון. ניתן לסמן ⭐ מועדפים (נשמר במחשב שלך).
-                </p>
-
-                <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 text-xs font-bold dark:bg-purple-900/20 dark:text-purple-300">
-                  ⭐ מועדפים: {favoriteTips.length}
+                {/* >>> ADDED: כרטיסייה לטיפים לחתונה */}
+                <Link to="/tips" className="relative overflow-hidden group bg-white dark:bg-surface-800 p-6 rounded-3xl shadow-sm border border-surface-100 dark:border-surface-700 hover:shadow-xl hover:-translate-y-1 transition duration-300">
+                <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-purple-600 to-pink-500"></div>
+                
+                <div className="flex items-center justify-between mb-4 pl-4">
+                    <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-2xl text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
+                    {/* אייקון נורה (טיפים) */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18h6" />
+                        <path d="M10 22h4" />
+                        <path d="M12 2a7 7 0 0 0-4 12c.5.5 1 1.5 1 2h6c0-.5.5-1.5 1-2a7 7 0 0 0-4-12z" />
+                    </svg>
+                    </div>
+                    <span className="text-3xl opacity-20">💡</span>
                 </div>
-              </div>
-            </Link>
-            {/* <<< ADDED */}
-          </div>
-        </section>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          
-          <div className="p-8 bg-white border shadow-sm dark:bg-surface-800 rounded-3xl border-surface-100 dark:border-surface-700">
-            <h3 className="flex items-center gap-2 mb-6 text-xl font-bold text-surface-800 dark:text-surface-100">
-              <span className="p-2 text-sm text-purple-600 rounded-lg bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300">✚</span> 
-              משימה חדשה
-            </h3>
-            <form onSubmit={handleCreateTask} className="space-y-5">
-              <div>
-                <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">מה צריך לעשות?</label>
-                <input type="text" placeholder="למשל: לקבוע פגישה עם הצלם..." className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800" 
-                  value={taskForm.title} onChange={e => setTaskForm({...taskForm, title: e.target.value})} required />
-              </div>
-              <div>
-                <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תאריך יעד</label>
-                <input type="date" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800" 
-                  value={taskForm.dueDate} onChange={e => setTaskForm({...taskForm, dueDate: e.target.value})} required />
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="pl-2">
+                    <h3 className="text-xl font-bold text-surface-800 dark:text-surface-100 mb-2">Wedding Tips</h3>
+                    <p className="text-sm text-surface-500 dark:text-surface-400 leading-relaxed">
+                    מאגר טיפים לפי קטגוריות + חיפוש ומיון. ניתן לסמן ⭐ מועדפים (נשמר במחשב שלך).
+                    </p>
+
+                    <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 text-xs font-bold dark:bg-purple-900/20 dark:text-purple-300">
+                    ⭐ מועדפים: {favoriteTips.length}
+                    </div>
+                </div>
+                </Link>
+                {/* <<< ADDED */}
+            </div>
+            </section>
+
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+            
+            <div className="p-8 bg-white border shadow-sm dark:bg-surface-800 rounded-3xl border-surface-100 dark:border-surface-700">
+                <h3 className="flex items-center gap-2 mb-6 text-xl font-bold text-surface-800 dark:text-surface-100">
+                <span className="p-2 text-sm text-purple-600 rounded-lg bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300">✚</span> 
+                משימה חדשה
+                </h3>
+                <form onSubmit={handleCreateTask} className="space-y-5">
                 <div>
-                  <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">קטגוריה</label>
-                  <select className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
-                    value={taskForm.category} onChange={e => setTaskForm({...taskForm, category: e.target.value})}>
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">מה צריך לעשות?</label>
+                    <input type="text" placeholder="למשל: לקבוע פגישה עם הצלם..." className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800" 
+                    value={taskForm.title} onChange={e => setTaskForm({...taskForm, title: e.target.value})} required />
                 </div>
                 <div>
-                  <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">סטטוס</label>
-                  <select className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
-                    value={taskForm.status || 'todo'} onChange={e => setTaskForm({...taskForm, status: e.target.value})}>
-                    <option value="todo">פתוחה</option>
-                    <option value="in_progress">בתהליך</option>
-                    <option value="done">הושלמה</option>
-                  </select>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תאריך יעד</label>
+                    <input type="date" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800" 
+                    value={taskForm.dueDate} onChange={e => setTaskForm({...taskForm, dueDate: e.target.value})} required />
                 </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">אחראי (שם)</label>
-                  <input type="text" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
-                    value={taskForm.assigneeName} onChange={e => setTaskForm({...taskForm, assigneeName: e.target.value})} placeholder="שם האחראי" />
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">קטגוריה</label>
+                    <select className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
+                        value={taskForm.category} onChange={e => setTaskForm({...taskForm, category: e.target.value})}>
+                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    </div>
+                    <div>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">סטטוס</label>
+                    <select className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
+                        value={taskForm.status || 'todo'} onChange={e => setTaskForm({...taskForm, status: e.target.value})}>
+                        <option value="todo">פתוחה</option>
+                        <option value="in_progress">בתהליך</option>
+                        <option value="done">הושלמה</option>
+                    </select>
+                    </div>
                 </div>
-                <div>
-                  <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">אחראי (אימייל)</label>
-                  <input type="email" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
-                    value={taskForm.assigneeEmail} onChange={e => setTaskForm({...taskForm, assigneeEmail: e.target.value})} placeholder="email@example.com" />
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">אחראי (שם)</label>
+                    <input type="text" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
+                        value={taskForm.assigneeName} onChange={e => setTaskForm({...taskForm, assigneeName: e.target.value})} placeholder="שם האחראי" />
+                    </div>
+                    <div>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">אחראי (אימייל)</label>
+                    <input type="email" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800"
+                        value={taskForm.assigneeEmail} onChange={e => setTaskForm({...taskForm, assigneeEmail: e.target.value})} placeholder="email@example.com" />
+                    </div>
                 </div>
-              </div>
-              <button className="w-full py-3.5 mt-2 font-bold text-white transition bg-purple-600 rounded-xl hover:bg-purple-700 shadow-lg shadow-purple-200 dark:shadow-none">
-                הוסף משימה לרשימה
-              </button>
-            </form>
-          </div>
+                <button className="w-full py-3.5 mt-2 font-bold text-white transition bg-purple-600 rounded-xl hover:bg-purple-700 shadow-lg shadow-purple-200 dark:shadow-none">
+                    הוסף משימה לרשימה
+                </button>
+                </form>
+            </div>
 
-          <div className="p-8 bg-white border shadow-sm dark:bg-surface-800 rounded-3xl border-surface-100 dark:border-surface-700">
-            <h3 className="flex items-center gap-2 mb-6 text-xl font-bold text-surface-800 dark:text-surface-100">
-              <span className="p-2 text-sm text-pink-600 rounded-lg bg-pink-100 dark:bg-pink-900/30 dark:text-pink-300">✚</span> 
-              אירוע חדש
-            </h3>
-            <form onSubmit={handleCreateEvent} className="space-y-5">
-              <div>
-                <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">שם האירוע</label>
-                <input type="text" placeholder="למשל: חינה / שבת חתן / חתונה" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
-                  value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} required />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                   <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תאריך</label>
-                   <input type="date" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
-                   value={eventForm.eventDate} onChange={e => setEventForm({...eventForm, eventDate: e.target.value})} required />
-                 </div>
-                 <div>
-                   <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תיאור (אופציונלי)</label>
-                   <input type="text" placeholder="פרטים..." className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
-                   value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} />
-                 </div>
-              </div>
-              <button className="w-full py-3.5 mt-2 font-bold text-white transition bg-pink-500 rounded-xl hover:bg-pink-600 shadow-lg shadow-pink-200 dark:shadow-none">
-                צור אירוע חדש
-              </button>
-            </form>
-          </div>
-        </div>
+            <div className="p-8 bg-white border shadow-sm dark:bg-surface-800 rounded-3xl border-surface-100 dark:border-surface-700">
+                <h3 className="flex items-center gap-2 mb-6 text-xl font-bold text-surface-800 dark:text-surface-100">
+                <span className="p-2 text-sm text-pink-600 rounded-lg bg-pink-100 dark:bg-pink-900/30 dark:text-pink-300">✚</span> 
+                אירוע חדש
+                </h3>
+                <form onSubmit={handleCreateEvent} className="space-y-5">
+                <div>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">שם האירוע</label>
+                    <input type="text" placeholder="למשל: חינה / שבת חתן / חתונה" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
+                    value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} required />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תאריך</label>
+                    <input type="date" className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
+                    value={eventForm.eventDate} onChange={e => setEventForm({...eventForm, eventDate: e.target.value})} required />
+                    </div>
+                    <div>
+                    <label className="block mb-1 text-sm font-medium text-surface-700 dark:text-surface-300">תיאור (אופציונלי)</label>
+                    <input type="text" placeholder="פרטים..." className="w-full p-3 transition border outline-none bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white border-surface-100 rounded-xl focus:ring-2 focus:ring-pink-200 dark:focus:ring-pink-800" 
+                    value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} />
+                    </div>
+                </div>
+                <button className="w-full py-3.5 mt-2 font-bold text-white transition bg-pink-500 rounded-xl hover:bg-pink-600 shadow-lg shadow-pink-200 dark:shadow-none">
+                    צור אירוע חדש
+                </button>
+                </form>
+            </div>
+            </div>
+        </>
+        )}
+        {/* >>> ADDED: סוף אזור הסתרה לשותף <<< */}
 
         {message && (
           <div className="fixed z-50 flex items-center gap-3 px-6 py-4 text-white shadow-2xl bottom-8 left-8 bg-gray-900/90 backdrop-blur rounded-2xl animate-fade-in-up">
