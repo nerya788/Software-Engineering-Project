@@ -22,10 +22,15 @@ const Table = require('./models/Table');
 const path = require('path'); // (NEW)
 const fs = require('fs');     // (NEW)
 
+// Helper to generate a random wedding code
+const generateWeddingCode = () => 'WED-' + Math.floor(1000 + Math.random() * 9000);
+
 const app = express();
 // כתובות מותרות (גם לוקאלי וגם הייצור ב-Render)
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
   "http://localhost:3000",
   "https://wedding-planner-app-x373.onrender.com",
   // כאן אנחנו קוראים את המשתנה מ-Render (או מ-.env)
@@ -58,7 +63,7 @@ app.use(cors({
 app.use(express.json());
 app.set('trust proxy', 1);
 
-// Helper function
+// Helper function to sanitize user object
 function toPublic(doc) {
   if (!doc) return doc;
   const o = doc.toObject ? doc.toObject() : doc;
@@ -66,6 +71,12 @@ function toPublic(doc) {
   delete o._id;
   delete o.__v;
   delete o.password_hash;
+
+  // Expose partner fields to the frontend
+  if (o.wedding_code) o.weddingCode = o.wedding_code;
+  if (o.is_partner) o.isPartner = o.is_partner;
+  if (o.linked_wedding_id) o.linkedWeddingId = o.linked_wedding_id;
+
   return o;
 }
 
@@ -176,9 +187,27 @@ io.on('connection', (socket) => {
   console.log(`🔌 User connected: ${socket.id}`);
   
   // הרשמת המשתמש ל"חדר" שלו
-  socket.on('register_user', (userId) => {
-    socket.join(userId);
+  // Register user to their room
+  socket.on('register_user', async (userId) => {
+    socket.join(userId); // Always join own private room
     console.log(`   --> User ${userId} joined room`);
+
+    // --- Partner Logic: Join the Main Wedding Room ---
+    try {
+      // Fetch user to check if they are a partner
+      // Note: Make sure 'User' model is required at the top of this file
+      const user = await User.findById(userId);
+      
+      if (user && user.is_partner && user.linked_wedding_id) {
+        const mainRoomId = String(user.linked_wedding_id);
+        
+        // Join the couple's room so updates (emitted to mainRoomId) are received here
+        socket.join(mainRoomId);
+        console.log(`   --> Partner ${userId} joined Linked Wedding Room: ${mainRoomId}`);
+      }
+    } catch (err) {
+      console.error('Socket join error:', err);
+    }
   });
 
   // --- מנגנון נעילה (Locking Mechanism) ---
@@ -256,18 +285,43 @@ app.get('/api/users/exists', async (req, res) => {
 });
 
 app.post('/api/users/register', async (req, res) => {
-  let { email, password, fullName } = req.body;
+  let { email, password, fullName, weddingCode, isPartner } = req.body;
+  
   if (!email || !password) {
     return res.status(400).json({ message: 'email and password are required' });
   }
   email = String(email).toLowerCase().trim();
+
   try {
-    const hashedPassword = await bcrypt.hash(password, 10); // הצפנה
-    const user = await User.create({
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Prepare user payload
+    const userPayload = {
       email,
-      password_hash: hashedPassword, // שמירת המוצפן
+      password_hash: hashedPassword,
       full_name: fullName || null,
-    });
+    };
+
+    // --- Partner Logic ---
+    
+    if (isPartner && weddingCode) {
+        // Scenario 1: Partner signing up -> Find the couple by code
+        const mainUser = await User.findOne({ wedding_code: weddingCode });
+        if (!mainUser) {
+            return res.status(404).json({ message: 'Invalid Wedding Code' });
+        }
+        
+        userPayload.is_partner = true;
+        userPayload.linked_wedding_id = mainUser._id; // Link to the couple
+        
+    } else {
+        // Scenario 2: New couple -> Generate a new code for them
+        // (In a real app, you might want to ensure uniqueness via loop)
+        userPayload.wedding_code = generateWeddingCode();
+        userPayload.is_partner = false;
+    }
+
+    const user = await User.create(userPayload);
     res.status(201).json(toPublic(user));
   } catch (err) {
     if (err && err.code === 11000) {
@@ -491,7 +545,17 @@ app.get('/api/events', async (req, res) => {
     return res.status(400).json({ message: 'userId query param is required' });
   }
   try {
-    const filter = { user_id: userId };
+    const requestUser = await User.findById(userId);
+    
+    // Determine which ID to search by:
+    // If partner -> use the linked couple's ID
+    // If regular user -> use their own ID
+    const searchId = (requestUser && requestUser.is_partner && requestUser.linked_wedding_id) 
+                      ? requestUser.linked_wedding_id 
+                      : userId;
+
+    const filter = { user_id: searchId };
+    
     if (start && end) {
       filter.event_date = {
         $gte: new Date(start),
@@ -597,8 +661,26 @@ app.post('/api/tasks', async (req, res) => {
 app.get('/api/tasks', async (req, res) => {
   const { userId, status, category, excludeDone, overdueOnly } = req.query;
   if (!userId) return res.status(400).json({ message: 'userId required' });
+
   try {
-    const filter = { user_id: userId };
+    // Identify the requesting user
+    const requestUser = await User.findById(userId);
+    if (!requestUser) return res.status(404).json({ message: 'User not found' });
+
+    let filter = {};
+
+    if (requestUser.is_partner && requestUser.linked_wedding_id) {
+        // --- Partner Scenario ---
+        // 1. Tasks belong to the couple (user_id is the couple's ID)
+        filter.user_id = requestUser.linked_wedding_id;
+        // 2. But assigned specifically to this partner (by email)
+        filter.assignee_email = requestUser.email; 
+    } else {
+        // --- Regular Scenario (Couple) ---
+        filter.user_id = userId;
+    }
+
+    // Apply standard filters
     if (status) filter.status = status;
     if (category) filter.category = category;
     if (excludeDone === 'true') {
@@ -610,6 +692,7 @@ app.get('/api/tasks', async (req, res) => {
       filter.is_done = false;
       filter.status = { $ne: 'done' };
     }
+
     const tasks = await Task.find(filter).sort({ due_date: 1, created_at: -1 });
     res.json(tasks.map(toPublic));
   } catch (err) {

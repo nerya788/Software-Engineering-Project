@@ -1,145 +1,258 @@
 import { useState } from 'react';
-import axios from 'axios';
-import { API_URL } from '../config';
+import { useTheme } from '../context/ThemeContext';
+import { Mail, Lock, User, Heart, Users, Key } from 'lucide-react';
+import { API_URL } from '../config'; // ✅ תיקון: ייבוא Named Import
 
 export default function Auth({ onLogin }) {
-  const [mode, setMode] = useState('login'); // login | register | forgot
-  const [registerForm, setRegisterForm] = useState({ email: '', password: '', fullName: '' });
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [forgotForm, setForgotForm] = useState({ email: '' });
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { isDarkMode } = useTheme();
+  
+  // Toggle between Login and Sign Up
+  const [isLogin, setIsLogin] = useState(true);
+  
+  // Form States
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  
+  // --- New Partner States ---
+  const [isPartner, setIsPartner] = useState(false);
+  const [weddingCode, setWeddingCode] = useState('');
+  // --------------------------
 
-  const handleRegisterChange = (e) => setRegisterForm({ ...registerForm, [e.target.name]: e.target.value });
-  const handleLoginChange = (e) => setLoginForm({ ...loginForm, [e.target.name]: e.target.value });
-  const handleForgotChange = (e) => setForgotForm({ ...forgotForm, [e.target.name]: e.target.value });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // פונקציה כללית לטיפול בשגיאות
-  const handleError = (err, prefix) => {
-    const errorMsg = err.response?.data?.message || 'אירעה שגיאה, נסה שנית';
-    setMessage(`${prefix}: ${errorMsg}`);
-    setIsLoading(false);
-  };
-
-  const handleRegister = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-    try {
-      await axios.post(`${API_URL}/api/users/register`, registerForm);
-      setMessage(`נרשמת בהצלחה! אנא התחבר.`);
-      setMode('login');
-      setRegisterForm({ email: '', password: '', fullName: '' });
-      setIsLoading(false);
-    } catch (err) { handleError(err, 'שגיאה בהרשמה'); }
-  };
+    setError('');
+    setLoading(true);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/api/users/login`, loginForm);
-      if (onLogin && res.data) {
-        if (!res.data.id && res.data._id) res.data.id = String(res.data._id);
-        onLogin(res.data);
+      const endpoint = isLogin ? '/api/users/login' : '/api/users/register';
+      
+      // ✅ תיקון: שימוש ישיר במשתנה API_URL
+      const url = `${API_URL}${endpoint}`;
+      
+      // Prepare payload
+      const payload = { email, password };
+      
+      if (!isLogin) {
+        payload.fullName = fullName;
+        
+        // Add partner data if applicable
+        if (isPartner) {
+            payload.isPartner = true;
+            payload.weddingCode = weddingCode;
+        }
       }
-    } catch (err) { handleError(err, 'שגיאה בהתחברות'); }
-  };
 
-  const handleForgot = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      const res = await axios.post(`${API_URL}/api/users/forgot`, forgotForm);
-      if (res.data.password) {
-        setMessage(`סיסמה חדשה: ${res.data.password}`);
-      } else {
-        setMessage('סיסמה חדשה נשלחה למייל שלך.');
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Authentication failed');
       }
-      setTimeout(() => { setMode('login'); setForgotForm({ email: '' }); }, 5000);
-      setIsLoading(false);
-    } catch (err) { handleError(err, 'שגיאה'); }
-  };
 
-  // עיצוב שדות קלט אחיד
-  const InputClass = "w-full p-3 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none text-surface-900 dark:text-white placeholder-surface-400 transition-colors";
-  // עיצוב כפתור אחיד
-  const ButtonClass = "w-full bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-primary-500/30 disabled:opacity-50 disabled:cursor-not-allowed";
+      // Login successful
+      if (onLogin) onLogin(data);
+
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md p-8 bg-white/80 dark:bg-surface-800/90 backdrop-blur-lg shadow-glass rounded-2xl border border-white/20">
-        <h1 className="text-4xl font-bold text-center text-primary-600 dark:text-primary-400 mb-6 drop-shadow-sm">
-          Wedding Planner
-        </h1>
+    <div className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-300 ${
+      isDarkMode ? 'bg-gray-900 text-white' : 'bg-pink-50 text-gray-900'
+    }`}>
+      <div className={`w-full max-w-md p-8 rounded-2xl shadow-xl transition-all duration-300 ${
+        isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-pink-100'
+      }`}>
+        
+        {/* Header Section */}
+        <div className="text-center mb-8">
+          <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+            isDarkMode ? 'bg-purple-900/50 text-purple-400' : 'bg-pink-100 text-pink-500'
+          }`}>
+            <Heart size={32} fill={isDarkMode ? "currentColor" : "none"} />
+          </div>
+          <h1 className="text-3xl font-bold mb-2">Wedding Planner</h1>
+          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {isLogin ? 'Welcome back! Please login.' : 'Start planning your dream wedding.'}
+          </p>
+        </div>
 
-        {/* --- LOGIN FORM --- */}
-        {mode === 'login' && (
-          <div className="animate-fade-in">
-            <form className="space-y-4" onSubmit={handleLogin}>
-              <input className={InputClass} type="email" name="email" placeholder="אימייל" value={loginForm.email} onChange={handleLoginChange} required />
-              <input className={InputClass} type="password" name="password" placeholder="סיסמה" value={loginForm.password} onChange={handleLoginChange} required />
-              <button type="submit" className={ButtonClass} disabled={isLoading}>
-                {isLoading ? 'מתחבר...' : 'התחבר'}
-              </button>
-            </form>
-            <div className="mt-6 flex flex-col space-y-3 text-center">
-              <button type="button" className="text-sm text-primary-600 dark:text-primary-400 hover:underline" onClick={() => {setMessage(''); setMode('forgot');}}>
-                שכחתי סיסמה
-              </button>
-              <div className="text-sm text-surface-500 dark:text-surface-400">
-                אין לך חשבון?{' '}
-                <button type="button" className="text-primary-600 dark:text-primary-400 font-bold hover:underline" onClick={() => {setMessage(''); setMode('register');}}>
-                  הירשם כאן
-                </button>
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm text-center">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          
+          {/* Full Name (Register Only) */}
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Full Name</label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  required={!isLogin}
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className={`w-full pl-10 pr-4 py-2 rounded-lg border focus:ring-2 focus:outline-none transition-all ${
+                    isDarkMode 
+                      ? 'bg-gray-700 border-gray-600 focus:ring-purple-500 focus:border-purple-500 text-white placeholder-gray-400' 
+                      : 'bg-white border-gray-300 focus:ring-pink-500 focus:border-pink-500'
+                  }`}
+                  placeholder="John Doe"
+                />
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* --- REGISTER FORM --- */}
-        {mode === 'register' && (
-          <div className="animate-fade-in">
-            <form className="space-y-4" onSubmit={handleRegister}>
-              <input className={InputClass} type="text" name="fullName" placeholder="שם מלא" value={registerForm.fullName} onChange={handleRegisterChange} />
-              <input className={InputClass} type="email" name="email" placeholder="אימייל" value={registerForm.email} onChange={handleRegisterChange} required />
-              <input className={InputClass} type="password" name="password" placeholder="סיסמה" value={registerForm.password} onChange={handleRegisterChange} required />
-              <button type="submit" className={ButtonClass} disabled={isLoading}>
-                {isLoading ? 'נרשם...' : 'הירשם'}
-              </button>
-            </form>
-            <div className="mt-6 text-center text-sm text-surface-500 dark:text-surface-400">
-              יש לך כבר חשבון?{' '}
-              <button type="button" className="text-primary-600 dark:text-primary-400 font-bold hover:underline" onClick={() => {setMessage(''); setMode('login');}}>
-                התחבר כאן
-              </button>
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Email Address</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`w-full pl-10 pr-4 py-2 rounded-lg border focus:ring-2 focus:outline-none transition-all ${
+                  isDarkMode 
+                    ? 'bg-gray-700 border-gray-600 focus:ring-purple-500 focus:border-purple-500 text-white placeholder-gray-400' 
+                    : 'bg-white border-gray-300 focus:ring-pink-500 focus:border-pink-500'
+                }`}
+                placeholder="you@example.com"
+              />
             </div>
           </div>
-        )}
 
-        {/* --- FORGOT FORM --- */}
-        {mode === 'forgot' && (
-          <div className="animate-fade-in">
-            <form className="space-y-4" onSubmit={handleForgot}>
-              <p className="text-sm text-surface-600 dark:text-surface-300 mb-2 text-center">הזן את האימייל שלך ונשלח לך סיסמה חדשה</p>
-              <input className={InputClass} type="email" name="email" placeholder="אימייל" value={forgotForm.email} onChange={handleForgotChange} required />
-              <button type="submit" className={ButtonClass} disabled={isLoading}>
-                {isLoading ? 'שולח...' : 'שלח סיסמה חדשה'}
-              </button>
-            </form>
-            <div className="mt-6 text-center">
-              <button type="button" className="text-sm text-primary-600 dark:text-primary-400 hover:underline" onClick={() => {setMessage(''); setMode('login');}}>
-                חזרה להתחברות
-              </button>
+          {/* Password */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={`w-full pl-10 pr-4 py-2 rounded-lg border focus:ring-2 focus:outline-none transition-all ${
+                  isDarkMode 
+                    ? 'bg-gray-700 border-gray-600 focus:ring-purple-500 focus:border-purple-500 text-white placeholder-gray-400' 
+                    : 'bg-white border-gray-300 focus:ring-pink-500 focus:border-pink-500'
+                }`}
+                placeholder="••••••••"
+              />
             </div>
           </div>
+
+          {/* --- Partner Section (Register Only) --- */}
+          {!isLogin && (
+            <div className={`p-4 rounded-lg border ${
+                isDarkMode ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            }`}>
+              {/* Checkbox */}
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input 
+                    type="checkbox"
+                    checked={isPartner}
+                    onChange={(e) => setIsPartner(e.target.checked)}
+                    className="w-5 h-5 text-pink-600 rounded focus:ring-pink-500"
+                />
+                <div className="flex items-center space-x-2">
+                    <Users size={18} className="text-gray-500"/>
+                    <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                        Join as a Partner
+                    </span>
+                </div>
+              </label>
+              
+              <p className={`text-xs mt-1 ml-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                Check this if you are a parent, friend, or helper joining an existing wedding.
+              </p>
+
+              {/* Conditional Input for Wedding Code */}
+              {isPartner && (
+                  <div className="mt-3 ml-8 animate-fadeIn">
+                      <label className="block text-xs font-semibold mb-1 uppercase tracking-wide">
+                          Enter Wedding Code
+                      </label>
+                      <div className="relative">
+                        <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            required={isPartner}
+                            value={weddingCode}
+                            onChange={(e) => setWeddingCode(e.target.value)}
+                            placeholder="e.g. WED-8429"
+                            className={`w-full pl-9 pr-4 py-2 text-sm rounded-md border focus:ring-2 focus:outline-none ${
+                                isDarkMode 
+                                ? 'bg-gray-600 border-gray-500 focus:border-purple-500 text-white' 
+                                : 'bg-white border-gray-300 focus:border-pink-500'
+                            }`}
+                        />
+                      </div>
+                  </div>
+              )}
+            </div>
+          )}
+          {/* -------------------------------------- */}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-3 px-4 rounded-lg font-medium text-white transition-all transform active:scale-95 ${
+              loading ? 'opacity-70 cursor-not-allowed' : 
+              isDarkMode 
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-900/30' 
+                : 'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 shadow-lg shadow-pink-200'
+            }`}
+          >
+            {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => {
+                setIsLogin(!isLogin);
+                setError('');
+                setIsPartner(false); // Reset partner state on toggle
+            }}
+            className={`text-sm hover:underline ${
+              isDarkMode ? 'text-purple-400' : 'text-pink-600'
+            }`}
+          >
+            {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
+          </button>
+        </div>
+        
+        {/* Forgot Password Link */}
+        {isLogin && (
+            <div className="mt-2 text-center">
+                <button 
+                   className={`text-xs ${isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                   onClick={() => alert('Feature coming soon!')}
+                >
+                    Forgot Password?
+                </button>
+            </div>
         )}
 
-        {/* --- MESSAGES --- */}
-        {message && (
-          <div className={`mt-4 p-3 rounded-lg text-center text-sm font-medium animate-pulse ${message.includes('הצלחה') || message.includes('חדשה') ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
-            {message}
-          </div>
-        )}
       </div>
     </div>
   );

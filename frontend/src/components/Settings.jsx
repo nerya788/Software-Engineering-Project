@@ -1,207 +1,244 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { useTheme } from '../context/ThemeContext';
+import { Save, User, Mail, Bell, Moon, Sun, Copy, Check, Users, Key } from 'lucide-react';
 import { API_URL } from '../config';
 
-const Settings = ({ currentUser, onUpdateUser }) => {
-  // אתחול המצב לפי הנתונים הקיימים
-  const [days, setDays] = useState(currentUser?.settings?.notification_days ?? 1);
+export default function Settings({ currentUser, onUpdateUser }) {
+  const { isDarkMode, toggleTheme } = useTheme();
+  
+  // State for form fields
+  const [fullName, setFullName] = useState(currentUser?.full_name || '');
+  const [email, setEmail] = useState(currentUser?.email || '');
+  const [notificationDays, setNotificationDays] = useState(currentUser?.settings?.notification_days || 1);
+  
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [passwordMessage, setPasswordMessage] = useState('');
-  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
-  const [activeTab, setActiveTab] = useState('notifications'); // 'notifications' | 'password'
-  const navigate = useNavigate();
+  const [copied, setCopied] = useState(false); // For copy feedback
 
-  // עדכון התצוגה אם המשתמש הראשי משתנה (למשל, דרך הסוקט)
-  useEffect(() => {
-    if (currentUser?.settings?.notification_days !== undefined) {
-      setDays(currentUser.settings.notification_days);
+  // בדיקה אם המשתמש הוא שותף
+  const isPartner = currentUser?.isPartner || currentUser?.is_partner;
+
+  // פונקציה להעתקת הקוד
+  const copyToClipboard = () => {
+    if (currentUser?.weddingCode) {
+      navigator.clipboard.writeText(currentUser.weddingCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
-  }, [currentUser]);
+  };
 
-  const handleSave = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
+
     try {
-      const res = await axios.put(`${API_URL}/api/users/${currentUser.id}/settings`, {
-        notificationDays: days
+      const token = localStorage.getItem('token'); // Assuming you use token based auth or cookie
+      // Note: In your current setup, you might be relying on cookies or just sending ID. 
+      // Adjust headers if needed based on your auth implementation.
+      
+      const res = await fetch(`${API_URL}/api/users/${currentUser.id}`, {
+        method: 'PUT',
+        headers: { 
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          full_name: fullName,
+          email: email,
+          settings: {
+            notification_days: notificationDays
+          }
+        }),
       });
-      
-      // עדכון מיידי של המשתמש באפליקציה (אופטימי)
-      if (onUpdateUser) {
-          onUpdateUser(res.data);
-      }
 
-      setMessage('ההגדרות נשמרו בהצלחה! מעדכן...');
+      const data = await res.json();
       
-      setTimeout(() => navigate('/'), 1500);
+      if (!res.ok) throw new Error(data.message || 'Update failed');
+
+      // Update parent state
+      onUpdateUser(data); 
+      setMessage('ההגדרות נשמרו בהצלחה! ✅');
+      setTimeout(() => setMessage(''), 3000);
+
     } catch (err) {
       console.error(err);
-      setMessage('שגיאה בשמירת ההגדרות: ' + (err.response?.data?.message || err.message));
+      setMessage('שגיאה בשמירת הנתונים ❌');
+    } finally {
+      setLoading(false);
     }
   };
-
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    setPasswordMessage('');
-    
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordMessage('הסיסמאות לא תואמות');
-      return;
-    }
-    
-    if (passwordForm.newPassword.length < 4) {
-      setPasswordMessage('הסיסמה חייבת להכיל לפחות 4 תווים');
-      return;
-    }
-    
-    try {
-      await axios.put(`${API_URL}/api/users/${currentUser.id}/password`, {
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword
-      });
-      
-      setPasswordMessage('הסיסמה שונתה בהצלחה! ✅');
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      
-      setTimeout(() => {
-        setPasswordMessage('');
-      }, 3000);
-    } catch (err) {
-      setPasswordMessage('שגיאה בשינוי סיסמה: ' + (err.response?.data?.message || err.message));
-    }
-  };
-
-  // סגנון אחיד לשדות קלט
-  const inputClass = "w-full p-3 border rounded-xl outline-none transition duration-200 bg-surface-50 border-surface-200 focus:ring-2 focus:ring-purple-500 dark:bg-surface-700 dark:border-surface-600 dark:text-white";
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-6 font-sans transition-colors duration-300 bg-surface-50 dark:bg-surface-900" dir="rtl">
-      <div className="w-full max-w-md p-8 bg-white border shadow-lg dark:bg-surface-800 rounded-2xl border-surface-100 dark:border-surface-700">
-        
-        <button onClick={() => navigate('/')} className="flex items-center mb-6 transition text-surface-500 dark:text-surface-400 hover:text-purple-600 dark:hover:text-purple-400">
-          <ArrowRight size={20} className="ml-1" />
-          חזרה לדשבורד
-        </button>
+    <div className="max-w-4xl mx-auto px-4 py-8" dir="rtl">
+      <h1 className="text-3xl font-bold mb-8 text-surface-800 dark:text-surface-100 flex items-center gap-3">
+        <SettingsIcon className="w-8 h-8 text-purple-600" />
+        הגדרות חשבון
+      </h1>
 
-        <h2 className="mb-6 text-2xl font-bold text-surface-800 dark:text-surface-100">⚙️ הגדרות</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         
-        {/* טאבים */}
-        <div className="flex gap-2 mb-6 border-b border-surface-200 dark:border-surface-700">
-          <button
-            onClick={() => setActiveTab('notifications')}
-            className={`pb-3 px-4 font-medium transition ${
-              activeTab === 'notifications' 
-                ? 'border-b-2 border-purple-600 text-purple-600 dark:text-purple-400 dark:border-purple-400' 
-                : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200'
-            }`}
-          >
-            התראות
-          </button>
-          <button
-            onClick={() => setActiveTab('password')}
-            className={`pb-3 px-4 font-medium transition ${
-              activeTab === 'password' 
-                ? 'border-b-2 border-purple-600 text-purple-600 dark:text-purple-400 dark:border-purple-400' 
-                : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200'
-            }`}
-          >
-            החלפת סיסמה
-          </button>
+        {/* --- Sidebar / Navigation (Visual only for now) --- */}
+        <div className="md:col-span-1 space-y-4">
+          <div className="p-6 bg-white dark:bg-surface-800 rounded-2xl shadow-sm border border-surface-100 dark:border-surface-700 text-center">
+            <div className="w-20 h-20 mx-auto bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-2xl font-bold text-purple-600 dark:text-purple-300 mb-4">
+              {fullName.charAt(0).toUpperCase()}
+            </div>
+            <h2 className="font-bold text-lg text-surface-800 dark:text-surface-100">{fullName}</h2>
+            <p className="text-sm text-surface-500 dark:text-surface-400">{isPartner ? 'שותף מורשה' : 'מנהל אירוע'}</p>
+          </div>
         </div>
 
-        {activeTab === 'notifications' ? (
-          <div className="animate-fade-in">
-            <div className="mb-8">
-              <label className="block mb-3 font-medium text-surface-700 dark:text-surface-300">מתי תרצה לקבל תזכורת לאירוע?</label>
-              <select 
-                value={days} 
-                onChange={(e) => setDays(Number(e.target.value))}
-                className={inputClass}
-              >
-                <option value={0}>ביום האירוע עצמו (0 ימים)</option>
-                <option value={1}>יום אחד לפני (מומלץ)</option>
-                <option value={2}>יומיים לפני</option>
-                <option value={3}>3 ימים לפני</option>
-                <option value={7}>שבוע לפני</option>
-              </select>
-              <p className="mt-2 text-sm text-surface-400">
-                ההתראה תופיע בפעמון בדשבורד.
-              </p>
+        {/* --- Main Content --- */}
+        <div className="md:col-span-2 space-y-6">
+
+          {/* 1. Partner Management Section (Visible only to Main User) */}
+          {!isPartner && (
+            <div className="p-6 bg-gradient-to-r from-purple-50 to-white dark:from-surface-800 dark:to-surface-800 rounded-2xl shadow-sm border border-purple-100 dark:border-surface-700">
+                <div className="flex items-start justify-between mb-4">
+                    <div>
+                        <h3 className="text-lg font-bold text-surface-800 dark:text-surface-100 flex items-center gap-2">
+                            <Users size={20} className="text-purple-600"/>
+                            שיתוף גישה לחתונה
+                        </h3>
+                        <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+                            שתף את הקוד הזה עם בן/בת הזוג, הורים או מלווים כדי לתת להם גישה למשימות.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-4 mt-2">
+                    <div className="relative flex-1">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Key size={18} className="text-gray-400" />
+                        </div>
+                        <input 
+                            type="text" 
+                            readOnly 
+                            value={currentUser?.weddingCode || 'טוען קוד...'} 
+                            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-surface-900 border-2 border-purple-200 dark:border-surface-600 rounded-xl font-mono text-lg font-bold text-center tracking-widest text-purple-700 dark:text-purple-300 focus:outline-none"
+                        />
+                    </div>
+                    <button 
+                        onClick={copyToClipboard}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${
+                            copied 
+                            ? 'bg-green-500 text-white shadow-green-200' 
+                            : 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-200 dark:shadow-none'
+                        }`}
+                    >
+                        {copied ? <Check size={20} /> : <Copy size={20} />}
+                        {copied ? 'הועתק!' : 'העתק'}
+                    </button>
+                </div>
+            </div>
+          )}
+
+          {/* 2. General Settings Form */}
+          <form onSubmit={handleSubmit} className="p-6 bg-white dark:bg-surface-800 rounded-2xl shadow-sm border border-surface-100 dark:border-surface-700 space-y-6">
+            <h3 className="text-lg font-bold text-surface-800 dark:text-surface-100 mb-4">פרטים אישיים</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label className="block text-sm font-medium mb-2 text-surface-700 dark:text-surface-300">שם מלא</label>
+                    <div className="relative">
+                        <User className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400" />
+                        <input
+                            type="text"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            className="w-full pr-10 pl-4 py-2 border rounded-xl bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none transition"
+                        />
+                    </div>
+                </div>
+                
+                <div>
+                    <label className="block text-sm font-medium mb-2 text-surface-700 dark:text-surface-300">כתובת אימייל</label>
+                    <div className="relative">
+                        <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400" />
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full pr-10 pl-4 py-2 border rounded-xl bg-surface-50 dark:bg-surface-700 dark:border-surface-600 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none transition"
+                        />
+                    </div>
+                </div>
             </div>
 
-            <button 
-              onClick={handleSave}
-              className="w-full py-4 font-bold text-white transition bg-purple-600 shadow-lg rounded-xl hover:bg-purple-700 shadow-purple-200 dark:shadow-none"
-            >
-              שמור שינויים
-            </button>
+            <hr className="border-surface-100 dark:border-surface-700 my-6" />
+
+            <h3 className="text-lg font-bold text-surface-800 dark:text-surface-100 mb-4">העדפות מערכת</h3>
+            
+            <div className="flex items-center justify-between p-4 bg-surface-50 dark:bg-surface-700/50 rounded-xl">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white dark:bg-surface-700 rounded-lg shadow-sm">
+                        {isDarkMode ? <Moon size={20} className="text-purple-400" /> : <Sun size={20} className="text-orange-400" />}
+                    </div>
+                    <div>
+                        <p className="font-medium text-surface-800 dark:text-surface-100">מצב תצוגה</p>
+                        <p className="text-xs text-surface-500 dark:text-surface-400">
+                            {isDarkMode ? 'מצב לילה פעיל' : 'מצב יום פעיל'}
+                        </p>
+                    </div>
+                </div>
+                <button 
+                    type="button"
+                    onClick={toggleTheme}
+                    className="px-4 py-2 text-sm font-medium bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-lg hover:bg-surface-50 dark:hover:bg-surface-600 transition"
+                >
+                    החלף ערכת נושא
+                </button>
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-surface-50 dark:bg-surface-700/50 rounded-xl">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white dark:bg-surface-700 rounded-lg shadow-sm">
+                        <Bell size={20} className="text-purple-500" />
+                    </div>
+                    <div>
+                        <p className="font-medium text-surface-800 dark:text-surface-100">התראות משימה</p>
+                        <p className="text-xs text-surface-500 dark:text-surface-400">כמה ימים לפני הדד-ליין לקבל התראה?</p>
+                    </div>
+                </div>
+                <select 
+                    value={notificationDays}
+                    onChange={(e) => setNotificationDays(Number(e.target.value))}
+                    className="px-3 py-2 bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                    <option value={1}>יום אחד לפני</option>
+                    <option value={2}>יומיים לפני</option>
+                    <option value={3}>3 ימים לפני</option>
+                    <option value={7}>שבוע לפני</option>
+                </select>
+            </div>
+
+            <div className="pt-4">
+                <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="w-full md:w-auto px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-lg shadow-purple-200 dark:shadow-none transition transform active:scale-95 flex items-center justify-center gap-2"
+                >
+                    {loading ? 'שומר...' : <><Save size={20} /> שמור שינויים</>}
+                </button>
+            </div>
 
             {message && (
-              <div className={`mt-6 text-center font-bold p-3 rounded-lg ${message.includes('שגיאה') ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'}`}>
-                {message}
-              </div>
+                <div className={`p-4 rounded-xl text-center font-medium animate-fade-in ${message.includes('שגיאה') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                    {message}
+                </div>
             )}
-          </div>
-        ) : (
-          <div className="animate-fade-in">
-            <form onSubmit={handlePasswordChange} className="space-y-5">
-              <div>
-                <label className="block mb-2 font-medium text-surface-700 dark:text-surface-300">סיסמה נוכחית</label>
-                <input
-                  type="password"
-                  value={passwordForm.currentPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                  className={inputClass}
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block mb-2 font-medium text-surface-700 dark:text-surface-300">סיסמה חדשה</label>
-                <input
-                  type="password"
-                  value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                  className={inputClass}
-                  required
-                  minLength={4}
-                />
-              </div>
-              
-              <div>
-                <label className="block mb-2 font-medium text-surface-700 dark:text-surface-300">אישור סיסמה חדשה</label>
-                <input
-                  type="password"
-                  value={passwordForm.confirmPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                  className={inputClass}
-                  required
-                  minLength={4}
-                />
-              </div>
+          </form>
 
-              <button
-                type="submit"
-                className="w-full py-4 font-bold text-white transition bg-purple-600 shadow-lg rounded-xl hover:bg-purple-700 shadow-purple-200 dark:shadow-none"
-              >
-                שנה סיסמה
-              </button>
-            </form>
-
-            {passwordMessage && (
-              <div className={`mt-6 text-center font-bold p-3 rounded-lg ${
-                passwordMessage.includes('שגיאה') || passwordMessage.includes('לא תואמות') || passwordMessage.includes('חייבת')
-                  ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' 
-                  : 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-              }`}>
-                {passwordMessage}
-              </div>
-            )}
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
-};
+}
 
-export default Settings;
+// Helper component for the header icon
+const SettingsIcon = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+      <circle cx="12" cy="12" r="3"></circle>
+    </svg>
+);
