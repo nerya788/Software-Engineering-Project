@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import io from 'socket.io-client'; // ✅ מהקובץ של החבר
 import './App.css';
 import { API_URL } from './config'; // ✅ מהקובץ של החבר
-
+import SeatingArrangements from './components/SeatingArrangements'; // <<< IMPORT THIS
 // רכיבים
 import Auth from './components/Auth';
 import ThemeToggle from './components/ThemeToggle';
@@ -110,6 +110,8 @@ function App() {
                 <Route path="/settings" element={<Settings currentUser={currentUser} onUpdateUser={handleLogin} />} />
                 
                 <Route path="*" element={<Navigate to="/" />} />
+                
+                <Route path="/events/:eventId/seating" element={<SeatingArrangements currentUser={currentUser} />} />
               </>
             )}
           </Routes>
