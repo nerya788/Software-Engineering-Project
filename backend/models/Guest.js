@@ -19,7 +19,7 @@ const guestSchema = new mongoose.Schema(
       enum: ['pending', 'attending', 'declined'], 
       default: 'pending' 
     },
-
+    table_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Table', default: null },
     // ✅ חדש: אורח שנוצר דרך עמוד ה-RSVP עם טלפון שלא זוהה
     is_unknown: { type: Boolean, default: false }
   },

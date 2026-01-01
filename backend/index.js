@@ -16,6 +16,7 @@ const Guest = require('./models/Guest');
 const Notification = require('./models/Notification');
 const BudgetItem = require('./models/BudgetItem'); 
 const XLSX = require('xlsx'); 
+const Table = require('./models/Table');
 
 // (NEW) - for serving frontend build on Render
 const path = require('path'); // (NEW)
@@ -1219,6 +1220,110 @@ app.put('/api/vendors/:id', async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 }); 
+
+/* ================================
+   SEATING ARRANGEMENTS ROUTES
+   ================================ */
+
+/**
+ * Get all tables for an event
+ */
+app.get('/api/events/:eventId/tables', async (req, res) => {
+  const { eventId } = req.params;
+  try {
+    const tables = await Table.find({ event_id: eventId }).sort({ created_at: 1 });
+    res.json(tables.map(toPublic));
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching tables', error: err.message });
+  }
+});
+
+/**
+ * Create a new table
+ */
+app.post('/api/tables', async (req, res) => {
+  const { eventId, name, capacity } = req.body;
+  if (!eventId || !name) return res.status(400).json({ message: 'Missing required fields' });
+
+  try {
+    const table = await Table.create({
+      event_id: eventId,
+      name,
+      capacity: Number(capacity) || 10
+    });
+    
+    // Notify clients to update UI
+    const event = await Event.findById(eventId);
+    if (event) io.to(String(event.user_id)).emit('data_changed');
+
+    res.status(201).json(toPublic(table));
+  } catch (err) {
+    res.status(500).json({ message: 'Error creating table', error: err.message });
+  }
+});
+
+/**
+ * Delete a table and unassign its guests
+ */
+app.delete('/api/tables/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const table = await Table.findById(id);
+    if (!table) return res.status(404).json({ message: 'Table not found' });
+
+    // 1. Unassign all guests currently at this table
+    await Guest.updateMany({ table_id: id }, { table_id: null });
+
+    // 2. Delete the table
+    await Table.findByIdAndDelete(id);
+
+    const event = await Event.findById(table.event_id);
+    if (event) io.to(String(event.user_id)).emit('data_changed');
+
+    res.json({ message: 'Table deleted and guests unassigned' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting table', error: err.message });
+  }
+});
+
+/**
+ * Assign a guest to a table (Logic Validation included)
+ */
+app.put('/api/guests/:guestId/seat', async (req, res) => {
+  const { guestId } = req.params;
+  const { tableId } = req.body; // null to unseat
+
+  try {
+    const guest = await Guest.findById(guestId);
+    if (!guest) return res.status(404).json({ message: 'Guest not found' });
+
+    // If assigning to a table (not just clearing), check capacity
+    if (tableId) {
+      const table = await Table.findById(tableId);
+      if (!table) return res.status(404).json({ message: 'Table not found' });
+
+      // Count current guests at this table
+      const currentCount = await Guest.countDocuments({ table_id: tableId });
+      
+      // Validation: Check if table is full (including the guest's +1s if you want strictly by seats, 
+      // but usually we count database records. Here is a strict check logic example):
+      if (currentCount >= table.capacity) {
+        return res.status(400).json({ message: 'Table is full', code: 'TABLE_FULL' });
+      }
+    }
+
+    guest.table_id = tableId || null;
+    await guest.save();
+
+    const event = await Event.findById(guest.event_id);
+    if (event) io.to(String(event.user_id)).emit('data_changed');
+
+    res.json(toPublic(guest));
+  } catch (err) {
+    res.status(500).json({ message: 'Error updating seating', error: err.message });
+  }
+});
+
 
 /* ================================
    SERVE FRONTEND BUILD (NEW)
