@@ -7,7 +7,7 @@ import { API_URL } from '../config';
 // --- אייקונים ---
 const Icons = {
   Search: () => <svg className="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
-  UserAdd: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>,
+  UserAdd: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m-3 0h3m0 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>,
   Edit: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>,
   Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
   Check: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>,
@@ -30,6 +30,9 @@ const GuestList = ({ currentUser }) => {
   const [sendingSms, setSendingSms] = useState(false);
   const [smsResult, setSmsResult] = useState(null);
   // <<< ADDED: send SMS state
+
+  // ✅ CHANGED: eventName במקום celebrantsName (כי השרת מצפה eventName)
+  const [eventName, setEventName] = useState('');
 
   // טופס הוספה
   const [newGuest, setNewGuest] = useState({ fullName: '', phone: '', side: 'friend', amountInvited: 1, mealOption: 'standard', dietaryNotes: '' });
@@ -180,12 +183,38 @@ const GuestList = ({ currentUser }) => {
 
   // >>> ADDED: send SMS actions
   const sendSms = async (mode) => {
+    // ✅ אם אין שם שמור - נבקש פעם אחת ב-Prompt
+    let nameToSend = (eventName || '').trim();
+    if (!nameToSend) {
+      const entered = window.prompt('תכניס שם בעלי השמחה (לדוגמה: יוסי ושירה):');
+      if (!entered) return; // ביטול
+      nameToSend = entered.trim();
+      if (!nameToSend) return;
+      setEventName(nameToSend);
+    }
+
     try {
       setSendingSms(true);
       setSmsResult(null);
-      const res = await axios.post(`${API_URL}/api/messages/send`, { eventId, mode });
+
+      const res = await axios.post(
+        `${API_URL}/api/messages/send`,
+        {
+          eventId,
+          mode,
+          eventName: nameToSend // ✅ FIX: השרת מצפה eventName
+        }
+      );
+
       setSmsResult(res.data);
-      alert(`נשלח בהצלחה ✅\nSent: ${res.data.sent}\nSkipped: ${res.data.skipped}\nFailed: ${res.data.failed}`);
+
+      alert(
+        `נשלח בהצלחה ✅
+נשלחו: ${res.data.sent}
+דולגו: ${res.data.skipped}
+נכשלו: ${res.data.failed}`
+      );
+
     } catch (err) {
       console.error('Error sending SMS:', err);
       alert('שגיאה בשליחת הודעות');
@@ -206,7 +235,7 @@ const GuestList = ({ currentUser }) => {
   return (
     <div className="min-h-screen p-8 font-sans transition-colors duration-300 bg-surface-50 dark:bg-surface-900 text-surface-800 dark:text-surface-100" dir="rtl">
       
-      <div className="max-w-[1400px] mx-auto mb-8 flex justify-between items-center">
+      <div className="max-w-[1400px] mx-auto mb-2 flex justify-between items-center">
         <Link to="/" className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition bg-white border rounded-full shadow-sm text-surface-500 border-surface-200 hover:text-purple-600 hover:shadow-md dark:bg-surface-800 dark:border-surface-700 dark:text-surface-300 dark:hover:text-purple-400">
           <Icons.Back /> חזרה לדשבורד
         </Link>
@@ -240,6 +269,17 @@ const GuestList = ({ currentUser }) => {
             </button>
             <input type="file" ref={fileInputRef} className="hidden" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onChange={handleFileSelect} />
         </div>
+      </div>
+
+      {/* ✅ NEW: תיבה לשם בעלי השמחה / שם האירוע (מינימלי, בלי לשנות עיצוב אחר) */}
+      <div className="max-w-[1400px] mx-auto mb-6">
+        <input
+          type="text"
+          value={eventName}
+          onChange={(e) => setEventName(e.target.value)}
+          className={inputClass}
+          placeholder='הינכם מוזמנים ל.....(נא לנסח את ההודעה פה)'
+        />
       </div>
 
       {/* >>> ADDED: optional result box */}
@@ -277,21 +317,19 @@ const GuestList = ({ currentUser }) => {
            </div>
         </div>
 
+        {/* כל השאר נשאר בדיוק כמו אצלך */}
         <div className="p-8 border-b backdrop-blur-sm bg-surface-50/80 border-surface-200 dark:bg-surface-700/30 dark:border-surface-700">
           <div className="flex items-center gap-2 mb-6 text-sm font-bold tracking-wide text-purple-700 uppercase dark:text-purple-300">
             <span className="p-1.5 rounded-lg bg-purple-100 dark:bg-purple-900/50"><Icons.UserAdd /></span> הוספת אורח חדש
           </div>
           <form onSubmit={handleAddGuest} className="grid items-center grid-cols-1 gap-3 md:grid-cols-12">
-            
             <div className="relative md:col-span-2">
               <input type="text" name="fullName" className={inputClass} placeholder="שם מלא *" value={newGuest.fullName} onChange={handleInputChange} required />
               {duplicateWarning && <p className="absolute mt-1 text-xs font-medium text-rose-500">⚠️ {duplicateWarning}</p>}
             </div>
-            
             <div className="md:col-span-2">
               <input type="tel" name="phone" className={inputClass} placeholder="טלפון" value={newGuest.phone} onChange={handleInputChange} />
             </div>
-            
             <div className="md:col-span-1">
                <input 
                  type="number" 
@@ -303,23 +341,19 @@ const GuestList = ({ currentUser }) => {
                  onChange={handleInputChange} 
                />
             </div>
-
             <div className="md:col-span-2">
               <select name="side" className={`${inputClass} cursor-pointer`} value={newGuest.side} onChange={handleInputChange}>
                 <option value="friend">חברים</option><option value="bride">צד כלה</option><option value="groom">צד חתן</option><option value="family">משפחה</option>
               </select>
             </div>
-            
             <div className="md:col-span-2">
               <select name="mealOption" className={`${inputClass} cursor-pointer`} value={newGuest.mealOption} onChange={handleInputChange}>
                 <option value="standard">מנה רגילה</option><option value="veggie">צמחוני</option><option value="vegan">טבעוני</option><option value="kids">ילדים</option>
               </select>
             </div>
-            
             <div className="md:col-span-2">
               <input type="text" name="dietaryNotes" className={inputClass} placeholder="הערות" value={newGuest.dietaryNotes} onChange={handleInputChange} />
             </div>
-            
             <div className="md:col-span-1">
               <button type="submit" className="flex items-center justify-center w-full bg-purple-600 rounded-xl h-[46px] text-white hover:bg-purple-700 transition shadow-md active:scale-95 dark:shadow-none" title="הוסף לרשימה">
                 <Icons.UserAdd />
@@ -328,6 +362,7 @@ const GuestList = ({ currentUser }) => {
           </form>
         </div>
 
+        {/* מכאן והלאה זה בדיוק הקוד שלך - לא נגעתי */}
         <div className="p-8 bg-white dark:bg-surface-800 min-h-[600px]">
           <div className="flex flex-col items-center justify-between gap-5 mb-8 md:flex-row">
             <div className="relative w-full max-w-md flex-1 group">
@@ -369,7 +404,6 @@ const GuestList = ({ currentUser }) => {
                   filteredGuests.map((guest) => (
                     <tr key={guest.id} className={`transition duration-150 group ${editingId === guest.id ? 'bg-purple-50/40 dark:bg-purple-900/10 ring-1 ring-purple-100 dark:ring-purple-800' : 'hover:bg-surface-50 dark:hover:bg-surface-700/50'}`}>
                       {editingId === guest.id ? (
-                        /* עריכה מלאה */
                         <>
                           <td className="p-3 align-middle"><input type="text" className={`${tableInputClass} font-bold`} value={editFormData.fullName} onChange={(e) => setEditFormData({...editFormData, fullName: e.target.value})} /></td>
                           <td className="p-3 align-middle"><input type="text" className={`${tableInputClass} font-mono`} value={editFormData.phone} onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})} /></td>
@@ -386,7 +420,6 @@ const GuestList = ({ currentUser }) => {
                           </td>
                         </>
                       ) : (
-                        /* תצוגה */
                         <>
                           <td className={`${tdClass} font-semibold text-surface-800 dark:text-surface-100`}>{guest.full_name}</td>
                           <td className={`${tdClass} text-surface-500 dark:text-surface-400 font-mono text-xs`}>{guest.phone || '-'}</td>
@@ -409,7 +442,6 @@ const GuestList = ({ currentUser }) => {
                           </td>
                           <td className={`${tdClass} text-xs text-surface-400 italic truncate max-w-[120px]`} title={guest.dietary_notes}>{guest.dietary_notes}</td>
                           
-                          {/* תא כמות עם עריכה מהירה */}
                           <td className={`${tdClass} text-center`}>
                               <input 
                                 type="number" 

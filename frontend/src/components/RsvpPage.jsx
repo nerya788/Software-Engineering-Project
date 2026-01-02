@@ -12,8 +12,11 @@ const RsvpPage = () => {
   const [phone, setPhone] = useState("");
   const [guest, setGuest] = useState(null);
 
+  // NEW: only used when guest is unknown
+  const [fullName, setFullName] = useState("");
+
   const [form, setForm] = useState({
-    rsvp_status: "attending",
+    rsvp_status: "attending", // attending | declined | pending
     amount_invited: 1,
     side: "friend",
     meal_option: "standard", // standard/special/veggie/vegan/kids
@@ -36,11 +39,24 @@ const RsvpPage = () => {
 
     try {
       setLoading(true);
-      const res = await axios.post(`${API_URL}/api/rsvp/events/${eventId}/lookup`, {
+
+      // ✅ match backend route + payload
+      const res = await axios.post(`${API_URL}/api/rsvp/lookup`, {
+        eventId,
         phone: phone.trim(),
       });
 
+      if (!res.data?.found) {
+        // not found => unknown
+        setGuest(null);
+        setFullName("");
+        setForm((prev) => ({ ...prev }));
+        setStep("form");
+        return;
+      }
+
       setGuest(res.data.guest);
+
       setForm({
         rsvp_status: res.data.guest?.rsvp_status || "attending",
         amount_invited: res.data.guest?.amount_invited || 1,
@@ -48,6 +64,7 @@ const RsvpPage = () => {
         meal_option: res.data.guest?.meal_option || "standard",
         dietary_notes: res.data.guest?.dietary_notes || "",
       });
+
       setStep("form");
     } catch (err) {
       console.error(err);
@@ -63,13 +80,18 @@ const RsvpPage = () => {
 
     try {
       setLoading(true);
-      await axios.post(`${API_URL}/api/rsvp/events/${eventId}/submit`, {
+
+      // ✅ match backend route + payload names
+      await axios.post(`${API_URL}/api/rsvp/submit`, {
+        eventId,
         phone: phone.trim(),
-        rsvp_status: form.rsvp_status,
-        amount_invited: Number(form.amount_invited) || 1,
+        fullName: guest?.full_name || fullName.trim() || undefined,
+        status: form.rsvp_status,
+        count: Number(form.amount_invited) || 1,
         side: form.side,
-        meal_option: form.meal_option,
-        dietary_notes: form.dietary_notes,
+        mealOption: form.meal_option,
+        // dietaryNotes exists in your DB but your submit route currently doesn't accept it
+        // so we don't send it to avoid confusion
       });
 
       setStep("done");
@@ -80,6 +102,8 @@ const RsvpPage = () => {
       setLoading(false);
     }
   };
+
+  const isUnknown = !guest;
 
   return (
     <div className="min-h-screen p-6 md:p-10 bg-surface-50 dark:bg-surface-900 text-surface-900 dark:text-surface-50">
@@ -132,6 +156,20 @@ const RsvpPage = () => {
                 {guest?.phone || phone}
               </div>
             </div>
+
+            {/* ✅ NEW: if unknown, ask for name */}
+            {isUnknown && (
+              <div>
+                <label className="block text-sm font-bold mb-2">שם מלא</label>
+                <input
+                  className={inputClass}
+                  type="text"
+                  placeholder="לא חובה, אבל מומלץ"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-bold mb-2">האם מגיע/ה?</label>

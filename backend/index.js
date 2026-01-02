@@ -896,10 +896,19 @@ app.post('/api/rsvp/submit', async (req, res) => {
    ================================ */
 
 // mode: "all" | "notResponded"
+// mode: "all" | "notResponded"
 app.post('/api/messages/send', async (req, res) => {
   try {
-    const { eventId, mode } = req.body || {};
+    const { eventId, mode, eventName } = req.body || {};
     if (!eventId) return res.status(400).json({ message: 'eventId is required' });
+
+    // נביא אירוע (למקרה שאין eventName)
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    // ✅ אם המשתמש שלח eventName (מה שהוא הקליד לפני השליחה) - נשתמש בו
+    // אחרת ניפול ל-event.title מה-DB
+    const finalEventName = String(eventName || event.title || '').trim() || 'האירוע';
 
     const filter = { event_id: eventId };
     if (mode === 'notResponded') {
@@ -910,7 +919,10 @@ app.post('/api/messages/send', async (req, res) => {
     const base = getPublicBaseUrl();
     const link = `${base}/rsvp/e/${eventId}`;
 
-    const hasTwilio = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM;
+    const hasTwilio =
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_SMS_FROM;
 
     let twilioClient = null;
     if (hasTwilio) {
@@ -931,7 +943,15 @@ app.post('/api/messages/send', async (req, res) => {
         continue;
       }
 
-      const text = `היי ${g.full_name || ''} 👋\nנשמח לאישור הגעה:\n${link}\n\n(יש לבחור מגיע/לא מגיע, כמות, צד, ומנה רגילה/מיוחדת)`;
+      // ✅ השם כאן הוא בדיוק מה שהקלדת (eventName) או מה-DB (event.title)
+      // בלי "חתונת" בכוח — אם אתה רוצה "חתונת X" תכתוב eventName="חתונת X"
+      const text =
+`הנכם מוזמנים ל${finalEventName} 💍
+
+נשמח לאישור הגעה דרך הקישור:
+${link}
+
+תודה רבה ❤️`;
 
       if (!twilioClient) {
         console.log('📩 [DEV SEND] to:', p, 'text:', text);
@@ -952,11 +972,18 @@ app.post('/api/messages/send', async (req, res) => {
       }
     }
 
-    return res.json({ ok: true, link, mode: mode || 'all', ...results });
+    return res.json({
+      ok: true,
+      link,
+      mode: mode || 'all',
+      eventTitle: finalEventName,
+      ...results
+    });
   } catch (err) {
     return res.status(500).json({ message: 'Error sending messages', error: err.message });
   }
 });
+
 
 // --- Notification Routes ---
 
