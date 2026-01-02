@@ -1,43 +1,38 @@
+// src/App.jsx
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import io from 'socket.io-client'; // ✅ מהקובץ של החבר
+import io from 'socket.io-client'; 
 import './App.css';
-import { API_URL } from './config'; // ✅ מהקובץ של החבר
-import SeatingArrangements from './components/SeatingArrangements'; // <<< IMPORT THIS
-// רכיבים
+import { API_URL } from './config'; 
+
+// --- רכיבים קיימים ---
 import Auth from './components/Auth';
-import ThemeToggle from './components/ThemeToggle';
 import Dashboard from './components/Dashboard';
 import GuestList from './components/GuestList';
 import EditEventForm from './components/EditEventForm';
 import Settings from './components/Settings';
 import BudgetDashboard from './components/BudgetDashboard';
-import VendorList from './components/VendorList'; // ✅ מהקובץ שלך (ניהול ספקים)
-
-// >>> ADDED: Tips page
+import VendorList from './components/VendorList'; 
 import Tips from './components/Tips';
-// <<< ADDED: Tips page
-
-// >>> ADDED: Public RSVP page
 import RsvpPage from './components/RsvpPage';
-// <<< ADDED: Public RSVP page
+import SeatingArrangements from './components/SeatingArrangements';
+
+// --- הרכיב החדש (Layout) שעוטף את העיצוב ---
+// וודא שיצרת את הקובץ הזה ב-src/components/Layout.jsx
+import Layout from './components/Layout'; 
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
-  // ✅ 1. טעינת משתמש מהזיכרון (מהקובץ שלך) - מונע התנתקות ברענון
+  // 1. טעינת משתמש
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
-      try {
-        setCurrentUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse user from local storage");
-      }
+      try { setCurrentUser(JSON.parse(storedUser)); } catch (e) { console.error("LS Error"); }
     }
   }, []);
 
-  // ✅ 2. הנדלרים עם שמירה לזיכרון (מהקובץ שלך)
+  // 2. הנדלרים
   const handleLogin = (userData) => {
     setCurrentUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
@@ -48,77 +43,51 @@ function App() {
     localStorage.removeItem('user');
   };
 
-  // ✅ 3. Observer Logic עם סוקט (מהקובץ של החבר) - סנכרון הגדרות בזמן אמת
+  // 3. סוקט (Socket)
   useEffect(() => {
     if (currentUser?.id) {
-      console.log('🔄 App: Connecting global socket for user sync...');
       const socket = io(API_URL, { transports: ['websocket'] });
-
-      // הרשמה לחדר של המשתמש
       socket.emit('register_user', currentUser.id);
-
-      // האזנה לאירוע שהוספנו בשרת: user_updated
       socket.on('user_updated', (updatedUser) => {
-        console.log('✨ App: User data updated from server:', updatedUser);
-        
-        // עדכון ה-State וגם ה-LocalStorage כדי שהסנכרון יישמר
         setCurrentUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
       });
-
-      return () => {
-        socket.disconnect();
-      };
+      return () => socket.disconnect();
     }
   }, [currentUser?.id]);
 
   return (
-    <div className="min-h-screen transition-colors duration-300 bg-surface-50 dark:bg-surface-900 text-surface-900 dark:text-surface-50">
-      
-      <div className="fixed top-4 left-4 z-50">
-        <ThemeToggle />
-      </div>
+    <Router>
+        <Routes>
+          {/* דפים ציבוריים (בלי תפריט צד) */}
+          <Route path="/rsvp/e/:eventId" element={<RsvpPage />} />
 
-      <Router>
-        <div className="container mx-auto px-4 py-8">
-          <Routes>
+          {/* משתמש לא מחובר -> מסך כניסה */}
+          {!currentUser ? (
+            <Route path="*" element={<Auth onLogin={handleLogin} />} />
+          ) : (
+            /* משתמש מחובר -> עיצוב החדש (Layout) */
+            <Route element={<Layout currentUser={currentUser} onLogout={handleLogout} />}>
+              
+              <Route path="/" element={<Dashboard currentUser={currentUser} />} />
+              
+              {/* דפים כלליים */}
+              <Route path="/vendors" element={<VendorList />} />
+              <Route path="/tips" element={<Tips />} />
+              <Route path="/settings" element={<Settings currentUser={currentUser} onUpdateUser={handleLogin} />} />
 
-            {/* ✅ RSVP ציבורי - עובד גם בלי משתמש מחובר */}
-            <Route path="/rsvp/e/:eventId" element={<RsvpPage />} />
-
-            {/* נתיבים למשתמש לא מחובר */}
-            {!currentUser ? (
-              <Route path="*" element={<Auth onLogin={handleLogin} />} />
-            ) : (
-              /* נתיבים למשתמש מחובר */
-              <>
-                <Route path="/" element={<Dashboard currentUser={currentUser} onLogout={handleLogout} />} />
-                
-                {/* ✅ הוספנו את הנתיב לספקים (מהקובץ שלך) */}
-                <Route path="/vendors" element={<VendorList />} />
-
-                {/* >>> ADDED: route לטיפים */}
-                <Route path="/tips" element={<Tips />} />
-                {/* <<< ADDED: route לטיפים */}
-                
-                {/* ✅ שימוש בגרסה של החבר שמעבירה currentUser למוזמנים */}
-                <Route path="/events/:eventId/guests" element={<GuestList currentUser={currentUser} />} />
-                
-                <Route path="/events/:eventId/budget" element={<BudgetDashboard currentUser={currentUser} />} />
-                <Route path="/events/:eventId/edit" element={<EditEventForm currentUser={currentUser} />} />
-
-                {/* ✅ חשוב: לשים את זה לפני ה-* כדי שלא ייבלע */}
-                <Route path="/events/:eventId/seating" element={<SeatingArrangements currentUser={currentUser} />} />
-                
-                <Route path="/settings" element={<Settings currentUser={currentUser} onUpdateUser={handleLogin} />} />
-                
-                <Route path="*" element={<Navigate to="/" />} />
-              </>
-            )}
-          </Routes>
-        </div>
-      </Router>
-    </div>
+              {/* דפים של אירוע ספציפי */}
+              <Route path="/events/:eventId/guests" element={<GuestList currentUser={currentUser} />} />
+              <Route path="/events/:eventId/budget" element={<BudgetDashboard currentUser={currentUser} />} />
+              <Route path="/events/:eventId/edit" element={<EditEventForm currentUser={currentUser} />} />
+              <Route path="/events/:eventId/seating" element={<SeatingArrangements currentUser={currentUser} />} />
+              
+              {/* ברירת מחדל */}
+              <Route path="*" element={<Navigate to="/" />} />
+            </Route>
+          )}
+        </Routes>
+    </Router>
   );
 }
 

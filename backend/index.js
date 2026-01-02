@@ -185,29 +185,21 @@ const activeLocks = {};
 // Socket.io - טיפול בחיבורים
 io.on('connection', (socket) => {
   console.log(`🔌 User connected: ${socket.id}`);
-  
-  // הרשמת המשתמש ל"חדר" שלו
-  // Register user to their room
-  socket.on('register_user', async (userId) => {
-    socket.join(userId); // Always join own private room
-    console.log(`   --> User ${userId} joined room`);
 
-    // --- Partner Logic: Join the Main Wedding Room ---
-    try {
-      // Fetch user to check if they are a partner
-      // Note: Make sure 'User' model is required at the top of this file
-      const user = await User.findById(userId);
-      
-      if (user && user.is_partner && user.linked_wedding_id) {
-        const mainRoomId = String(user.linked_wedding_id);
-        
-        // Join the couple's room so updates (emitted to mainRoomId) are received here
-        socket.join(mainRoomId);
-        console.log(`   --> Partner ${userId} joined Linked Wedding Room: ${mainRoomId}`);
-      }
-    } catch (err) {
-      console.error('Socket join error:', err);
-    }
+  // 1. האזנה להצטרפות לחדר של אירוע ספציפי (בשביל סידורי הושבה)
+  socket.on('join_event', (eventId) => {
+    socket.join(eventId);
+    console.log(`Socket ${socket.id} joined event room: ${eventId}`);
+  });
+
+  // 2. האזנה להצטרפות לחדר פרטי של משתמש (בשביל הדשבורד הכללי)
+  socket.on('register_user', (userId) => {
+    socket.join(userId);
+    console.log(`Socket ${socket.id} joined user room: ${userId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('User disconnected');
   });
 
   // --- מנגנון נעילה (Locking Mechanism) ---
@@ -1332,103 +1324,97 @@ app.put('/api/vendors/:id', async (req, res) => {
 }); 
 
 /* ================================
-   SEATING ARRANGEMENTS ROUTES
+   SEATING ARRANGEMENTS ROUTES (Fixed)
    ================================ */
 
-/**
- * Get all tables for an event
- */
+// קבלת כל השולחנות
 app.get('/api/events/:eventId/tables', async (req, res) => {
   const { eventId } = req.params;
   try {
-    const tables = await Table.find({ event_id: eventId }).sort({ created_at: 1 });
-    res.json(tables.map(toPublic));
+    // שים לב: וידאנו שהשדה הוא eventId (לפי המודל שיצרנו קודם)
+    const tables = await Table.find({ eventId }).sort({ createdAt: 1 });
+    res.json(tables);
   } catch (err) {
     res.status(500).json({ message: 'Error fetching tables', error: err.message });
   }
 });
 
-/**
- * Create a new table
- */
+// יצירת שולחן חדש
 app.post('/api/tables', async (req, res) => {
-  const { eventId, name, capacity } = req.body;
-  if (!eventId || !name) return res.status(400).json({ message: 'Missing required fields' });
-
   try {
-    const table = await Table.create({
-      event_id: eventId,
-      name,
-      capacity: Number(capacity) || 10
-    });
+    // 1. אנחנו מקבלים eventId מהפרונט
+    const { eventId, name, capacity, userId } = req.body;
     
-    // Notify clients to update UI
-    const event = await Event.findById(eventId);
-    if (event) io.to(String(event.user_id)).emit('data_changed');
+    // 2. אנחנו יוצרים אובייקט עם המפתח eventId (תואם למודל החדש)
+    const newTable = new Table({
+      eventId: eventId, // ✅ התאמה למודל
+      userId: userId,
+      name: name,
+      capacity: parseInt(capacity) || 10
+    });
 
-    res.status(201).json(toPublic(table));
+    await newTable.save();
+    
+    // שליחת עדכון לחדר
+    io.to(eventId).emit('data_changed', { type: 'TABLE_ADDED' });
+    
+    res.status(201).json(newTable);
   } catch (err) {
-    res.status(500).json({ message: 'Error creating table', error: err.message });
+    console.error('Error creating table:', err);
+    res.status(500).json({ error: err.message });
   }
-});
+}); 
 
-/**
- * Delete a table and unassign its guests
- */
+// מחיקת שולחן
 app.delete('/api/tables/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const table = await Table.findById(id);
     if (!table) return res.status(404).json({ message: 'Table not found' });
 
-    // 1. Unassign all guests currently at this table
+    // 1. איפוס אורחים
     await Guest.updateMany({ table_id: id }, { table_id: null });
 
-    // 2. Delete the table
+    // 2. מחיקת שולחן
     await Table.findByIdAndDelete(id);
 
-    const event = await Event.findById(table.event_id);
-    if (event) io.to(String(event.user_id)).emit('data_changed');
+    // 🔥 עדכון לחדר של האירוע (table.eventId הוא ה-Key לחדר)
+    io.to(table.eventId.toString()).emit('data_changed', { type: 'TABLE_DELETED' });
 
-    res.json({ message: 'Table deleted and guests unassigned' });
+    res.json({ message: 'Table deleted' });
   } catch (err) {
     res.status(500).json({ message: 'Error deleting table', error: err.message });
   }
 });
 
-/**
- * Assign a guest to a table (Logic Validation included)
- */
+// עדכון הושבה (גרירה)
 app.put('/api/guests/:guestId/seat', async (req, res) => {
   const { guestId } = req.params;
-  const { tableId } = req.body; // null to unseat
+  const { tableId } = req.body; 
 
   try {
     const guest = await Guest.findById(guestId);
     if (!guest) return res.status(404).json({ message: 'Guest not found' });
 
-    // If assigning to a table (not just clearing), check capacity
     if (tableId) {
       const table = await Table.findById(tableId);
       if (!table) return res.status(404).json({ message: 'Table not found' });
 
-      // Count current guests at this table
+      // בדיקת קיבולת
       const currentCount = await Guest.countDocuments({ table_id: tableId });
-      
-      // Validation: Check if table is full (including the guest's +1s if you want strictly by seats, 
-      // but usually we count database records. Here is a strict check logic example):
       if (currentCount >= table.capacity) {
         return res.status(400).json({ message: 'Table is full', code: 'TABLE_FULL' });
       }
     }
 
+    // עדכון
     guest.table_id = tableId || null;
     await guest.save();
 
-    const event = await Event.findById(guest.event_id);
-    if (event) io.to(String(event.user_id)).emit('data_changed');
+    // 🔥 עדכון לחדר של האירוע
+    io.to(guest.eventId.toString()).emit('data_changed', { type: 'SEATING_UPDATED' });
 
-    res.json(toPublic(guest));
+    res.json(guest);
   } catch (err) {
     res.status(500).json({ message: 'Error updating seating', error: err.message });
   }
