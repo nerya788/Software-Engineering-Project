@@ -106,12 +106,13 @@ function App() {
                 
                 <Route path="/events/:eventId/budget" element={<BudgetDashboard currentUser={currentUser} />} />
                 <Route path="/events/:eventId/edit" element={<EditEventForm currentUser={currentUser} />} />
+
+                {/* ✅ חשוב: לשים את זה לפני ה-* כדי שלא ייבלע */}
+                <Route path="/events/:eventId/seating" element={<SeatingArrangements currentUser={currentUser} />} />
                 
                 <Route path="/settings" element={<Settings currentUser={currentUser} onUpdateUser={handleLogin} />} />
                 
                 <Route path="*" element={<Navigate to="/" />} />
-                
-                <Route path="/events/:eventId/seating" element={<SeatingArrangements currentUser={currentUser} />} />
               </>
             )}
           </Routes>
