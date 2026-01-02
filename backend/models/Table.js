@@ -1,16 +1,32 @@
-const { mongoose } = require('../db');
+const mongoose = require('mongoose');
 
-/**
- * Table Schema
- * Represents a seating table within a specific event.
- */
-const tableSchema = new mongoose.Schema(
-  {
-    event_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true, index: true },
-    name: { type: String, required: true }, // e.g., "Table 1", "VIP Family"
-    capacity: { type: Number, default: 10 }, // Maximum guests allowed
+const tableSchema = new mongoose.Schema({
+  // ✅ תיקון: שינינו מ-event_id ל-eventId
+  eventId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Event', 
+    required: true 
   },
-  { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
-);
+  userId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: false // השארנו false כדי למנוע את הקריסה הקודמת
+  },
+  name: { 
+    type: String, 
+    required: true 
+  },
+  capacity: { 
+    type: Number, 
+    default: 10 
+  }
+}, { timestamps: true });
+
+// המרה של _id ל-id בשביל הפרונט
+tableSchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: function (doc, ret) { delete ret._id; }
+});
 
 module.exports = mongoose.model('Table', tableSchema);
