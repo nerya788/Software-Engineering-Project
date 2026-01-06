@@ -8,7 +8,7 @@ import io from 'socket.io-client';
 import Countdown from './Countdown.jsx';
 import { API_URL } from '../config';
 
-const Dashboard = ({ currentUser, onLogout }) => {
+const Dashboard = ({ currentUser }) => {
   const categories = ['general', 'vendors', 'budget', 'design', 'guests', 'logistics'];
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -280,9 +280,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
                <Settings size={20} />
              </Link>
 
-             <button onClick={onLogout} className="px-4 py-2 text-sm transition border rounded-full bg-surface-100 dark:bg-surface-700 dark:border-surface-600 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-300 text-surface-700 dark:text-surface-200 border-surface-200">
-               יציאה
-             </button>
           </div>
         </div>
       </header>
