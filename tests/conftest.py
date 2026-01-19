@@ -65,9 +65,10 @@ def credentials():
     Fetched securely from the .env file.
     
     Returns:
-        dict: {'email': '...', 'password': '...'}
+        dict: {'email': '...', 'password': '...', 'main_test_user_wedding_code': '...'}
     """
     return {
         "email": os.getenv("TEST_EMAIL"),
-        "password": os.getenv("TEST_PASSWORD")
+        "password": os.getenv("TEST_PASSWORD"),
+        "main_test_user_wedding_code": os.getenv("MAIN_TEST_USER_WEDDING_CODE")
     }
