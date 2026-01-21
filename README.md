@@ -45,28 +45,35 @@ A comprehensive system for managing wedding planning tasks, guests, budgets, and
 
 1.  **Clone the repository**
     ```bash
-    git clone [https://github.com/nerya788/Software-Engineering-Project.git](https://github.com/nerya788/Software-Engineering-Project.git)
+    git clone https://github.com/nerya788/Software-Engineering-Project.git
     cd Software-Engineering-Project
     ```
 
-2.  **Install Backend Dependencies**
+2.  **Install Backend and Frontend Dependencies**
     ```bash
     cd backend
     npm install
-    ```
-
-3.  **Install Frontend Dependencies**
-    ```bash
     cd ../frontend
     npm install
     ```
 
-4.  **Environment Setup**
+3.  **Environment Setup**
     Create a `.env` file in the `backend` directory with your MongoDB URI and other configurations.
 
-5.  **Run the App**
-    * Backend: `npm start` (in `backend` folder)
-    * Frontend: `npm run dev` (in `frontend` folder)
+4.  **Run the App**
+    The backend and frontend must run simultaneously. Open **two separate terminals**:
+
+    * **Terminal 1 (Backend):**
+        ```bash
+        cd backend
+        npm start
+        ```
+
+    * **Terminal 2 (Frontend):**
+        ```bash
+        cd frontend
+        npm run dev
+        ```
 
 ## 🧪 Running Tests
 To run the automated tests using Selenium and Pytest:
