@@ -7,7 +7,9 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 # --- Load Environment Variables ---
 # This ensures .env is loaded for all tests in the session
-load_dotenv()
+current_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(current_dir, '.env')
+load_dotenv(env_path)
 
 @pytest.fixture(scope="session")
 def base_url():
