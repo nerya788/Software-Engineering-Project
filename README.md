@@ -3,11 +3,88 @@
 This repository contains the full project for the Software Engineering course.
 The project is developed using agile methodology in multiple sprints.
 
+## 📖 Description
+A comprehensive system for managing wedding planning tasks, guests, budgets, and vendors. The system is designed to help couples organize their wedding efficiently with real-time updates and collaboration tools.
+
 ### 🛠️ Tech Stack
-* **Frontend:** React + Vite
-* **Backend:** Node.js, Express.js
-* **Database:** PostgreSQL + Prisma ORM
-* **DevOps:** Azure DevOps (CI/CD, Boards, Wiki)
+
+* **Frontend:**
+    * React
+    * Vite
+    * TailwindCSS
+* **Backend:**
+    * Node.js
+    * Express.js
+* **Database:**
+    * MongoDB
+    * Mongoose
+* **DevOps:**
+    * Azure DevOps (CI/CD, Boards, Wiki)
+* **Testing:**
+    * Python
+    * Selenium
+    * Pytest
+
+### ✨ Key Features
+* **User Management:** Authentication and authorization for couples and collaborators.
+* **Guest Management:** Manage guest lists and RSVPs.
+* **Budget Tracking:** Track expenses and manage wedding budget.
+* **Event & Task Management:** Organize timeline and to-do lists.
+* **Seating Arrangements:** Drag-and-drop seating organization.
+* **Vendor Management:** Keep track of wedding vendors and contracts.
+* **Notifications:** Real-time updates via Email/WhatsApp (Twilio/Nodemailer).
+
+## 🚀 Getting Started
+
+### Prerequisites
+* Node.js
+* MongoDB
+* Python (for running tests)
+
+### Installation
+
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/nerya788/Software-Engineering-Project.git
+    cd Software-Engineering-Project
+    ```
+
+2.  **Install Backend and Frontend Dependencies**
+    ```bash
+    cd backend
+    npm install
+    cd ../frontend
+    npm install
+    ```
+
+3.  **Environment Setup**
+    Create a `.env` file in the `backend` directory with your MongoDB URI and other configurations.
+
+4.  **Run the App**
+    The backend and frontend must run simultaneously. Open **two separate terminals**:
+
+    * **Terminal 1 (Backend):**
+        ```bash
+        cd backend
+        npm start
+        ```
+
+    * **Terminal 2 (Frontend):**
+        ```bash
+        cd frontend
+        npm run dev
+        ```
+
+## 🧪 Running Tests
+To run the automated tests using Selenium and Pytest:
+```bash
+cd tests
+pip install -r requirements.txt
+pytest
+```
+
+
+
 
 ---
 

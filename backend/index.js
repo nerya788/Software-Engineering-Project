@@ -22,8 +22,16 @@ const Table = require('./models/Table');
 const path = require('path'); // (NEW)
 const fs = require('fs');     // (NEW)
 
-// Helper to generate a random wedding code
-const generateWeddingCode = () => 'WED-' + Math.floor(1000 + Math.random() * 9000);
+// Helper to generate a random wedding code (e.g., "WED-X7K9")
+// Uses a mix of letters and numbers, excluding confusing characters like I, 1, 0, O.
+const generateWeddingCode = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = 'WED-';
+  for (let i = 0; i < 4; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
 
 const app = express();
 // כתובות מותרות (גם לוקאלי וגם הייצור ב-Render)
@@ -295,21 +303,49 @@ app.post('/api/users/register', async (req, res) => {
     };
 
     // --- Partner Logic ---
-    
-    if (isPartner && weddingCode) {
-        // Scenario 1: Partner signing up -> Find the couple by code
+    // We check 'isPartner' first to define the user's intent clearly.
+    if (isPartner) {
+        // 1. Validation: Partners MUST provide a wedding code.
+        // If the code is missing, we return a 400 error immediately.
+        // This prevents the system from accidentally falling back to creating a new wedding (Scenario 2).
+        if (!weddingCode) {
+             return res.status(400).json({ message: 'Partner registration requires a valid Wedding Code' });
+        }
+
+        // Scenario 1: Partner joining an existing couple
+        // We search for the main user who owns this wedding code.
         const mainUser = await User.findOne({ wedding_code: weddingCode });
+        
         if (!mainUser) {
             return res.status(404).json({ message: 'Invalid Wedding Code' });
         }
         
+        // Link the partner to the found main user
         userPayload.is_partner = true;
-        userPayload.linked_wedding_id = mainUser._id; // Link to the couple
+        userPayload.linked_wedding_id = mainUser._id;
         
     } else {
-        // Scenario 2: New couple -> Generate a new code for them
-        // (In a real app, you might want to ensure uniqueness via loop)
-        userPayload.wedding_code = generateWeddingCode();
+        // Scenario 2: New couple -> Generate a UNIQUE code securely
+        
+        let isUnique = false;
+        let newCode = '';
+
+        // Retry loop: Keep generating codes until we find one that doesn't exist in the DB
+        while (!isUnique) {
+            newCode = generateWeddingCode();
+            
+            // Check database for any existing user with this code
+            // Note: Mongoose 'findOne' returns null if no document is found
+            const existingUser = await User.findOne({ wedding_code: newCode });
+            
+            if (!existingUser) {
+                // Code is free to use
+                isUnique = true;
+            }
+            // If existingUser is found, the loop runs again automatically
+        }
+
+        userPayload.wedding_code = newCode;
         userPayload.is_partner = false;
     }
 
